@@ -82,8 +82,14 @@
               <span id="userName"></span>
             </div>
             <div class="dropdown-divider"></div>
+            <button class="dropdown-item" id="bindGithubBtn">
+              <span class="dropdown-icon">🔗</span> 绑定 GitHub
+            </button>
+            <button class="dropdown-item" id="bindEmailBtn">
+              <span class="dropdown-icon">📧</span> 绑定邮箱
+            </button>
             <button class="dropdown-item" id="registerPasskeyBtn">
-              <span class="dropdown-icon">🔐</span> 注册 Passkey
+              <span class="dropdown-icon">🔐</span> 添加通行密匙
             </button>
             <button class="dropdown-item" id="logoutBtn">
               <span class="dropdown-icon">🚪</span> 退出登录
@@ -214,9 +220,9 @@
             <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             <circle cx="12" cy="16" r="1"/>
           </svg>
-          <span>Passkey 登录</span>
+          <span>通行密匙登录</span>
         </button>
-        <p class="passkey-hint">首次使用需先登录账号，然后在菜单中注册 Passkey</p>
+        <p class="passkey-hint">首次使用需先登录账号，然后在菜单中添加通行密匙</p>
       </div>
       <!-- 忘记密码模式 -->
       <div id="resetView" style="display:none;">

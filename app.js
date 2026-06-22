@@ -726,23 +726,23 @@
           timeoutPromise
         ]);
         clearTimeout(timeoutId);
-        showToast('Passkey 登录成功', 'success');
+        showToast('通行密匙登录成功', 'success');
       } catch (e) {
         clearTimeout(timeoutId);
-        var msg = e.message || 'Passkey 登录失败';
+        var msg = e.message || '通行密匙登录失败';
         if (msg.indexOf('NotAllowedError') >= 0 || msg.indexOf('cancelled') >= 0) {
-          msg = 'Passkey 验证已取消';
+          msg = '通行密匙验证已取消';
         } else if (msg.indexOf('TimeoutError') >= 0) {
-          msg = '验证超时，请检查设备或确认已注册 Passkey';
+          msg = '验证超时，请检查设备或确认已添加通行密匙';
         } else if (msg.indexOf('not supported') >= 0 || msg.indexOf('WebAuthn') >= 0) {
-          msg = '当前浏览器或环境不支持 Passkey';
+          msg = '当前浏览器或环境不支持通行密匙';
         } else if (msg.indexOf('InvalidStateError') >= 0 || msg.indexOf('credential') >= 0) {
-          msg = '未找到已注册的 Passkey，请先使用邮箱登录';
+          msg = '未找到已添加的通行密匙，请先使用邮箱登录';
         }
         showToast(msg, 'error');
       } finally {
         btn.disabled = false;
-        btn.querySelector('span').textContent = 'Passkey 登录';
+        btn.querySelector('span').textContent = '通行密匙登录';
       }
     });
 
@@ -771,19 +771,63 @@
       }
     });
 
-    // Register Passkey
+    // 添加通行密匙（支持多个设备）
     $('#registerPasskeyBtn').addEventListener('click', async function () {
       userDropdown.classList.remove('open');
       try {
         await NavDB.registerPasskey();
-        showToast('Passkey 注册成功，下次可用指纹/面容登录', 'success');
+        showToast('通行密匙已添加，可在更多设备上重复添加', 'success');
       } catch (e) {
-        var msg = e.message || 'Passkey 注册失败';
+        var msg = e.message || '通行密匙添加失败';
         if (msg.indexOf('NotAllowedError') >= 0 || msg.indexOf('cancelled') >= 0) {
-          msg = 'Passkey 注册已取消';
+          msg = '通行密匙添加已取消';
         } else if (msg.indexOf('already registered') >= 0 || msg.indexOf('exists') >= 0) {
-          msg = '该设备已注册 Passkey';
+          msg = '该设备已添加通行密匙，可换其他设备添加';
         }
+        showToast(msg, 'error');
+      }
+    });
+
+    // 绑定 GitHub
+    $('#bindGithubBtn').addEventListener('click', async function () {
+      userDropdown.classList.remove('open');
+      try {
+        await NavDB.linkIdentity('github');
+      } catch (e) {
+        showToast('绑定 GitHub 失败: ' + e.message, 'error');
+      }
+    });
+
+    // 绑定邮箱
+    $('#bindEmailBtn').addEventListener('click', async function () {
+      userDropdown.classList.remove('open');
+      var hasEmail = currentUser && currentUser.email && currentUser.app_metadata && currentUser.app_metadata.provider === 'email';
+
+      if (hasEmail) {
+        showToast('当前已绑定邮箱：' + currentUser.email, 'info');
+        return;
+      }
+
+      // GitHub 用户绑定邮箱 + 设置密码
+      var newEmail = prompt('请输入要绑定的邮箱地址：');
+      if (!newEmail || !newEmail.trim()) return;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) {
+        showToast('邮箱格式不正确', 'error');
+        return;
+      }
+
+      var newPassword = prompt('设置登录密码（至少 6 位，用于邮箱登录）：');
+      if (!newPassword || newPassword.length < 6) {
+        if (newPassword) showToast('密码至少 6 位', 'error');
+        return;
+      }
+
+      try {
+        await NavDB.updateUser({ email: newEmail.trim(), password: newPassword });
+        showToast('邮箱绑定成功，今后可用邮箱+密码登录', 'success');
+      } catch (e) {
+        var msg = e.message || '绑定失败';
+        if (msg.indexOf('already registered') >= 0) msg = '该邮箱已被其他账号使用';
         showToast(msg, 'error');
       }
     });

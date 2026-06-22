@@ -112,6 +112,30 @@ var NavDB = (function () {
     return _ref.data;
   }
 
+  async function linkIdentity(provider) {
+    var sb = getClient();
+    var _ref = await sb.auth.linkIdentity({
+      provider: provider,
+      options: {
+        redirectTo: window.location.origin + window.location.pathname
+      }
+    });
+    if (_ref.error) throw _ref.error;
+    return _ref.data;
+  }
+
+  async function updateUser(data) {
+    var sb = getClient();
+    var _ref = await sb.auth.updateUser(data);
+    if (_ref.error) throw _ref.error;
+    return _ref.data;
+  }
+
+  function getIdentities() {
+    var sb = getClient();
+    return sb.auth.getUserIdentities();
+  }
+
   function getUser() {
     return currentUser;
   }
@@ -262,6 +286,9 @@ var NavDB = (function () {
     signInWithPasskey: signInWithPasskey,
     exchangeCodeForSession: exchangeCodeForSession,
     setSession: setSession,
+    linkIdentity: linkIdentity,
+    updateUser: updateUser,
+    getIdentities: getIdentities,
     getUser: getUser,
     isLoggedIn: isLoggedIn,
     onAuthChange: onAuthChange,
