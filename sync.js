@@ -122,23 +122,23 @@ var NavSync = (function () {
     var bms = [];
 
     DEFAULT_DATA.forEach(function (def, ci) {
-      var catId = uuid();
+      var catId = def.id || uuid();
       cats.push({
         id: catId,
         name: def.name,
         sort_order: ci,
-        updated_at: new Date().toISOString(),
+        updated_at: null, // 不设置时间戳，作为“未改动默认数据”的标记
         _local: true
       });
       def.bookmarks.forEach(function (bm, bi) {
         bms.push({
-          id: uuid(),
+          id: bm.id || uuid(),
           category_id: catId,
           name: bm.name,
           url: bm.url,
           description: bm.description,
           sort_order: bi,
-          updated_at: new Date().toISOString(),
+          updated_at: null,
           _local: true
         });
       });
@@ -147,6 +147,49 @@ var NavSync = (function () {
     var data = { categories: cats, bookmarks: bms };
     saveLocal(data);
     return data;
+  }
+
+  /* ---- 去重保护：清理同名、同URL的重复数据 ---- */
+  function deduplicate(data) {
+    var uniqueCats = [];
+    var catNameMap = {};
+    var oldToNewCatId = {};
+
+    // 1. 分类去重 (保留最新的)
+    data.categories.sort(function(a, b) {
+      return new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime();
+    }).forEach(function(c) {
+      var key = c.name.trim();
+      if (!catNameMap[key]) {
+        catNameMap[key] = c;
+        uniqueCats.push(c);
+        oldToNewCatId[c.id] = c.id;
+      } else {
+        oldToNewCatId[c.id] = catNameMap[key].id; // 记录映射
+      }
+    });
+
+    var uniqueBms = [];
+    var bmUrlMap = {};
+
+    // 2. 书签去重 (基于 URL + 分类，保留最新的)
+    data.bookmarks.sort(function(a, b) {
+      return new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime();
+    }).forEach(function(b) {
+      var newCatId = oldToNewCatId[b.category_id];
+      if (!newCatId) return; // 孤立书签丢弃
+
+      // 修正挂载的 category_id
+      var mappedBm = Object.assign({}, b, { category_id: newCatId });
+      var key = mappedBm.url.trim() + '||' + newCatId;
+      
+      if (!bmUrlMap[key]) {
+        bmUrlMap[key] = mappedBm;
+        uniqueBms.push(mappedBm);
+      }
+    });
+
+    return { categories: uniqueCats, bookmarks: uniqueBms };
   }
 
   /* ---- 合并策略：时间戳对比，最后写入胜出 ---- */
@@ -224,6 +267,15 @@ var NavSync = (function () {
     var remoteData = await NavDB.fetchAll();
     remoteData = await flushPendingDeletes(remoteData);
 
+    // 在合并之前，如果本地数据全是默认且未被改过，直接用云端数据覆盖
+    var isLocalDefaultOnly = localData.categories.length > 0 && localData.categories.every(function (c) {
+      return c.id.startsWith('def-cat-') && !c.updated_at;
+    });
+
+    if (isLocalDefaultOnly) {
+      localData = { categories: [], bookmarks: [] };
+    }
+
     // 远端无数据 → 把本地推上去
     if (remoteData.categories.length === 0 && remoteData.bookmarks.length === 0) {
       if (localData.categories.length > 0) {
@@ -234,28 +286,21 @@ var NavSync = (function () {
       return localData;
     }
 
-    // 本地无数据 → 拉远端
+    // 本地无数据 (或被识别为纯粹的未改动默认数据) → 拉远端
     if (localData.categories.length === 0 && localData.bookmarks.length === 0) {
-      saveLocal(remoteData);
+      // 拉取远端时也做一次去重保护，清理历史遗留重复
+      var dedupedRemote = deduplicate(remoteData);
+      saveLocal(dedupedRemote);
       setMerged();
       setLocalSyncTime(new Date().toISOString());
-      return remoteData;
+      return dedupedRemote;
     }
 
-    // 两边都有 → 合并
-    if (!hasMerged()) {
-      var merged = mergeData(localData, remoteData);
-      saveLocal(merged);
-      await NavDB.pushAll(merged.categories, merged.bookmarks);
-      setMerged();
-      setLocalSyncTime(new Date().toISOString());
-      return merged;
-    }
-
-    // 已合并过 → 正常合并
-    var merged = mergeData(localData, remoteData);
+    // 两边都有 → 合并 & 终极去重
+    var merged = deduplicate(mergeData(localData, remoteData));
     saveLocal(merged);
     await NavDB.pushAll(merged.categories, merged.bookmarks);
+    setMerged();
     setLocalSyncTime(new Date().toISOString());
     return merged;
   }
