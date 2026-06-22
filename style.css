@@ -1061,9 +1061,17 @@ body {
 }
 
 .footer-feature {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 0.75rem;
   color: var(--text-light);
   white-space: nowrap;
+}
+
+.footer-feature svg {
+  color: var(--primary);
+  opacity: 0.8;
 }
 
 .footer-bottom {
