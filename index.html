@@ -322,6 +322,17 @@
         <div class="auth-back" id="backToLogin">← 返回登录</div>
       </div>
 
+      <!-- 修改密码模式 (从重置邮件跳回时使用) -->
+      <div id="updatePasswordView" style="display:none;">
+        <h3 class="modal-title">设置新密码</h3>
+        <p class="auth-hint">请为你的账号设置一个新的密码。</p>
+        <div class="form-group">
+          <label>新密码</label>
+          <input type="password" id="updatePasswordInput" class="form-input" placeholder="至少 6 位" autocomplete="new-password">
+        </div>
+        <button class="btn btn-confirm auth-full-btn" id="updatePasswordBtn">确认修改</button>
+      </div>
+
       <!-- 注册成功确认模式 -->
       <div id="confirmView" style="display:none;">
         <div class="confirm-icon">📬</div>

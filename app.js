@@ -84,6 +84,13 @@
         // Implicit 流程：token 直接在 URL 里，手动建立 session
         try {
           await NavDB.setSession(accessToken, refreshToken);
+          
+          // 如果是密码重置回跳
+          if (params.get('type') === 'recovery') {
+            setTimeout(function() {
+              openUpdatePasswordView();
+            }, 500);
+          }
         } catch (e) {
           console.error('Set session 失败:', e);
         }
@@ -896,8 +903,47 @@
   function showConfirmView(email) {
     authFormView.style.display = 'none';
     resetView.style.display = 'none';
+    if ($('#updatePasswordView')) $('#updatePasswordView').style.display = 'none';
     confirmView.style.display = '';
     $('#confirmEmail').textContent = email;
+  }
+
+  function openUpdatePasswordView() {
+    authFormView.style.display = 'none';
+    resetView.style.display = 'none';
+    confirmView.style.display = 'none';
+    if ($('#updatePasswordView')) $('#updatePasswordView').style.display = '';
+    authModal.classList.add('active');
+    setTimeout(function () { if ($('#updatePasswordInput')) $('#updatePasswordInput').focus(); }, 100);
+  }
+
+  async function submitUpdatePassword() {
+    var pwdInput = $('#updatePasswordInput');
+    if (!pwdInput) return;
+    var newPassword = pwdInput.value;
+    
+    if (newPassword.length < 6) {
+      showToast('新密码至少 6 位', 'error');
+      return;
+    }
+
+    var btn = $('#updatePasswordBtn');
+    btn.disabled = true;
+    btn.textContent = '修改中…';
+
+    try {
+      await NavDB.updateUser({ password: newPassword });
+      showToast('密码已成功修改', 'success');
+      setTimeout(function () {
+        closeAuthModal();
+        pwdInput.value = '';
+      }, 1000);
+    } catch (e) {
+      showToast('密码修改失败: ' + (e.message || ''), 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '确认修改';
+    }
   }
 
   async function submitResetPassword() {
@@ -1296,11 +1342,19 @@
       }
     });
 
-    // Auth modal - forgot password
+    // Auth modal - forgot password / update password
     $('#forgotLink').addEventListener('click', function () { showResetView(); });
     $('#resetSubmitBtn').addEventListener('click', submitResetPassword);
     $('#backToLogin').addEventListener('click', function () { showLoginView(); });
     $('#confirmCloseBtn').addEventListener('click', closeAuthModal);
+    if ($('#updatePasswordBtn')) $('#updatePasswordBtn').addEventListener('click', submitUpdatePassword);
+    
+    if ($('#updatePasswordInput')) {
+      $('#updatePasswordInput').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') submitUpdatePassword();
+      });
+    }
+
     $('#resetEmail').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') submitResetPassword();
     });
