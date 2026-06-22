@@ -78,10 +78,12 @@ var NavSync = (function () {
     var bmIds = Object.keys(deletedBms);
     for (var i = 0; i < bmIds.length; i++) {
       try {
+        // 尝试推送到云端删除
         await NavDB.deleteBookmark(bmIds[i]);
-        delete deletedBms[bmIds[i]];
+        // 注意：我们不再从 deletedBms 中删除该墓碑标记，
+        // 永远保留墓碑，防止由于云端竞态条件导致幽灵数据复活。
       } catch (e) {
-        console.warn('云端删除书签失败，保留下次重试:', e.message);
+        console.warn('云端删除书签请求失败:', e.message);
       }
     }
 
@@ -89,12 +91,12 @@ var NavSync = (function () {
     for (var j = 0; j < catIds.length; j++) {
       try {
         await NavDB.deleteCategory(catIds[j]);
-        delete deletedCats[catIds[j]];
       } catch (e2) {
-        console.warn('云端删除分类失败，保留下次重试:', e2.message);
+        console.warn('云端删除分类请求失败:', e2.message);
       }
     }
 
+    // 重新保存墓碑，确保持续生效
     saveDeleted(LS_DELETED_BOOKMARKS, deletedBms);
     saveDeleted(LS_DELETED_CATEGORIES, deletedCats);
     return filteredRemote;
