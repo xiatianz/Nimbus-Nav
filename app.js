@@ -417,6 +417,15 @@
     resetView.style.display = 'none';
     $('#authEmail').value = '';
     $('#authPassword').value = '';
+
+    // Check WebAuthn support
+    var passkeyBtn = $('#passkeyBtn');
+    if (!window.PublicKeyCredential) {
+      passkeyBtn.style.display = 'none';
+    } else {
+      passkeyBtn.style.display = '';
+    }
+
     authModal.classList.add('active');
     setTimeout(function () { $('#authEmail').focus(); }, 100);
   }
@@ -662,6 +671,28 @@
       });
     });
 
+    // Auth modal - Passkey
+    $('#passkeyBtn').addEventListener('click', async function () {
+      var btn = this;
+      btn.disabled = true;
+      btn.querySelector('span').textContent = '验证中…';
+      try {
+        await NavDB.signInWithPasskey();
+        showToast('Passkey 登录成功', 'success');
+      } catch (e) {
+        var msg = e.message || 'Passkey 登录失败';
+        if (msg.indexOf('NotAllowedError') >= 0 || msg.indexOf('cancelled') >= 0) {
+          msg = 'Passkey 验证已取消';
+        } else if (msg.indexOf('not supported') >= 0 || msg.indexOf('WebAuthn') >= 0) {
+          msg = '当前浏览器或环境不支持 Passkey';
+        }
+        showToast(msg, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.querySelector('span').textContent = 'Passkey 登录';
+      }
+    });
+
     // Auth modal - forgot password
     $('#forgotLink').addEventListener('click', function () { showResetView(); });
     $('#resetSubmitBtn').addEventListener('click', submitResetPassword);
@@ -689,6 +720,23 @@
     syncBtn.addEventListener('click', function () {
       userDropdown.classList.remove('open');
       manualSync();
+    });
+
+    // Register Passkey
+    $('#registerPasskeyBtn').addEventListener('click', async function () {
+      userDropdown.classList.remove('open');
+      try {
+        await NavDB.registerPasskey();
+        showToast('Passkey 注册成功，下次可用指纹/面容登录', 'success');
+      } catch (e) {
+        var msg = e.message || 'Passkey 注册失败';
+        if (msg.indexOf('NotAllowedError') >= 0 || msg.indexOf('cancelled') >= 0) {
+          msg = 'Passkey 注册已取消';
+        } else if (msg.indexOf('already registered') >= 0 || msg.indexOf('exists') >= 0) {
+          msg = '该设备已注册 Passkey';
+        }
+        showToast(msg, 'error');
+      }
     });
 
     logoutBtn.addEventListener('click', async function () {

@@ -71,6 +71,20 @@ var NavDB = (function () {
     return _ref.data;
   }
 
+  async function registerPasskey() {
+    var sb = getClient();
+    var _ref = await sb.auth.registerPasskey();
+    if (_ref.error) throw _ref.error;
+    return _ref.data;
+  }
+
+  async function signInWithPasskey() {
+    var sb = getClient();
+    var _ref = await sb.auth.signInWithPasskey();
+    if (_ref.error) throw _ref.error;
+    return _ref.data;
+  }
+
   function getUser() {
     return currentUser;
   }
@@ -217,6 +231,8 @@ var NavDB = (function () {
     signInWithEmail: signInWithEmail,
     signOut: signOut,
     resetPassword: resetPassword,
+    registerPasskey: registerPasskey,
+    signInWithPasskey: signInWithPasskey,
     getUser: getUser,
     isLoggedIn: isLoggedIn,
     onAuthChange: onAuthChange,
