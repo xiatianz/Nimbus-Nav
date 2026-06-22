@@ -23,6 +23,17 @@ var NavDB = (function () {
     return client;
   }
 
+  function dataOrThrow(response) {
+    if (response && response.error) throw response.error;
+    return response ? response.data : null;
+  }
+
+  function redirectIfNeeded(data) {
+    if (data && data.url) {
+      window.location.href = data.url;
+    }
+  }
+
   /* ---- 认证 ---- */
 
   async function getSession() {
@@ -44,6 +55,7 @@ var NavDB = (function () {
       console.error('GitHub 登录失败:', _ref.error.message);
       throw _ref.error;
     }
+    redirectIfNeeded(_ref.data);
   }
 
   async function signUpWithEmail(email, password) {
@@ -83,16 +95,71 @@ var NavDB = (function () {
 
   async function registerPasskey() {
     var sb = getClient();
-    var _ref = await sb.auth.registerPasskey();
-    if (_ref.error) throw _ref.error;
-    return _ref.data;
+    var _ref;
+    if (sb.auth.registerPasskey) {
+      _ref = await sb.auth.registerPasskey();
+    } else if (sb.auth.passkey && sb.auth.passkey.register) {
+      _ref = await sb.auth.passkey.register();
+    } else {
+      throw new Error('当前 Supabase 客户端不支持通行密匙注册');
+    }
+    return dataOrThrow(_ref);
   }
 
   async function signInWithPasskey() {
     var sb = getClient();
-    var _ref = await sb.auth.signInWithPasskey();
-    if (_ref.error) throw _ref.error;
-    return _ref.data;
+    var _ref;
+    if (sb.auth.signInWithPasskey) {
+      _ref = await sb.auth.signInWithPasskey();
+    } else if (sb.auth.passkey && sb.auth.passkey.signIn) {
+      _ref = await sb.auth.passkey.signIn();
+    } else {
+      throw new Error('当前 Supabase 客户端不支持通行密匙登录');
+    }
+    return dataOrThrow(_ref);
+  }
+
+  async function listPasskeys() {
+    var sb = getClient();
+    var _ref;
+    if (sb.auth.passkey && sb.auth.passkey.list) {
+      _ref = await sb.auth.passkey.list();
+    } else if (sb.auth.listPasskeys) {
+      _ref = await sb.auth.listPasskeys();
+    } else {
+      throw new Error('当前 Supabase 客户端不支持读取通行密匙');
+    }
+    return dataOrThrow(_ref);
+  }
+
+  async function deletePasskey(credentialId) {
+    var sb = getClient();
+    var _ref;
+    if (sb.auth.passkey && sb.auth.passkey.delete) {
+      _ref = await sb.auth.passkey.delete({ passkeyId: credentialId });
+    } else if (sb.auth.deletePasskey) {
+      _ref = await sb.auth.deletePasskey(credentialId);
+    } else {
+      throw new Error('当前 Supabase 客户端不支持删除通行密匙');
+    }
+    return dataOrThrow(_ref);
+  }
+
+  async function updatePasskey(credentialId, data) {
+    var sb = getClient();
+    var friendlyName = data.friendlyName || data.friendly_name;
+    var _ref;
+    if (sb.auth.passkey && sb.auth.passkey.update) {
+      _ref = await sb.auth.passkey.update({
+        passkeyId: credentialId,
+        friendlyName: friendlyName
+      });
+    } else if (sb.auth.updatePasskey) {
+      _ref = await sb.auth.updatePasskey(credentialId, data);
+    } else {
+      throw new Error('当前 Supabase 客户端不支持修改通行密匙');
+    }
+    return dataOrThrow(_ref);
   }
 
   async function exchangeCodeForSession(code) {
@@ -121,6 +188,7 @@ var NavDB = (function () {
       }
     });
     if (_ref.error) throw _ref.error;
+    redirectIfNeeded(_ref.data);
     return _ref.data;
   }
 
@@ -161,6 +229,7 @@ var NavDB = (function () {
       .select('*')
       .eq('user_id', currentUser.id)
       .order('sort_order', { ascending: true });
+    if (_ref.error) throw _ref.error;
     return _ref.data || [];
   }
 
@@ -176,7 +245,7 @@ var NavDB = (function () {
         updated_at: new Date().toISOString()
       };
     });
-    await sb.from('categories').upsert(rows, { onConflict: 'id' });
+    dataOrThrow(await sb.from('categories').upsert(rows, { onConflict: 'id' }));
   }
 
   async function insertCategory(cat) {
@@ -188,19 +257,19 @@ var NavDB = (function () {
       name: cat.name,
       sort_order: cat.sort_order
     }).select().single();
-    return _ref.data;
+    return dataOrThrow(_ref);
   }
 
   async function updateCategory(id, updates) {
     if (!isLoggedIn()) return;
     var sb = getClient();
-    await sb.from('categories').update(updates).eq('id', id).eq('user_id', currentUser.id);
+    dataOrThrow(await sb.from('categories').update(updates).eq('id', id).eq('user_id', currentUser.id));
   }
 
   async function deleteCategory(id) {
     if (!isLoggedIn()) return;
     var sb = getClient();
-    await sb.from('categories').delete().eq('id', id).eq('user_id', currentUser.id);
+    dataOrThrow(await sb.from('categories').delete().eq('id', id).eq('user_id', currentUser.id));
   }
 
   /* ---- 书签 CRUD ---- */
@@ -212,6 +281,7 @@ var NavDB = (function () {
       .select('*')
       .eq('user_id', currentUser.id)
       .order('sort_order', { ascending: true });
+    if (_ref.error) throw _ref.error;
     return _ref.data || [];
   }
 
@@ -230,7 +300,7 @@ var NavDB = (function () {
         updated_at: new Date().toISOString()
       };
     });
-    await sb.from('bookmarks').upsert(rows, { onConflict: 'id' });
+    dataOrThrow(await sb.from('bookmarks').upsert(rows, { onConflict: 'id' }));
   }
 
   async function insertBookmark(bm) {
@@ -245,19 +315,19 @@ var NavDB = (function () {
       description: bm.description || '',
       sort_order: bm.sort_order
     }).select().single();
-    return _ref.data;
+    return dataOrThrow(_ref);
   }
 
   async function updateBookmark(id, updates) {
     if (!isLoggedIn()) return;
     var sb = getClient();
-    await sb.from('bookmarks').update(updates).eq('id', id).eq('user_id', currentUser.id);
+    dataOrThrow(await sb.from('bookmarks').update(updates).eq('id', id).eq('user_id', currentUser.id));
   }
 
   async function deleteBookmark(id) {
     if (!isLoggedIn()) return;
     var sb = getClient();
-    await sb.from('bookmarks').delete().eq('id', id).eq('user_id', currentUser.id);
+    dataOrThrow(await sb.from('bookmarks').delete().eq('id', id).eq('user_id', currentUser.id));
   }
 
   /* ---- 批量操作 ---- */
@@ -284,6 +354,9 @@ var NavDB = (function () {
     resetPassword: resetPassword,
     registerPasskey: registerPasskey,
     signInWithPasskey: signInWithPasskey,
+    listPasskeys: listPasskeys,
+    deletePasskey: deletePasskey,
+    updatePasskey: updatePasskey,
     exchangeCodeForSession: exchangeCodeForSession,
     setSession: setSession,
     linkIdentity: linkIdentity,

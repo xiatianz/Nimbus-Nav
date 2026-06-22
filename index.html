@@ -69,8 +69,23 @@
         <p class="subtitle">你的私人导航，跨设备同步</p>
       </div>
       <div class="header-right" id="authArea">
+        <button class="open-mode-icon-btn" id="openModeBtn" type="button" title="打开方式：新标签" aria-label="打开方式：新标签">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 3h7v7"/>
+            <path d="M10 14 21 3"/>
+            <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>
+          </svg>
+        </button>
         <!-- 未登录：统一登录按钮 -->
-        <button class="login-btn" id="loginBtn">登录 / 注册</button>
+        <button class="login-btn" id="loginBtn" aria-label="登录或注册账号">
+          <span class="login-btn-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="8" r="4"/>
+              <path d="M5 20a7 7 0 0 1 14 0"/>
+            </svg>
+          </span>
+          <span>登录</span>
+        </button>
         <!-- 已登录：用户信息 + 菜单（初始隐藏） -->
         <div class="user-menu" id="userMenu" style="display:none;">
           <button class="user-avatar-btn" id="userAvatarBtn">
@@ -79,20 +94,63 @@
           </button>
           <div class="user-dropdown" id="userDropdown">
             <div class="dropdown-header">
-              <span id="userName"></span>
+              <div class="dropdown-user-main">
+                <span id="userName"></span>
+                <span class="dropdown-user-email" id="userEmail"></span>
+              </div>
             </div>
             <div class="dropdown-divider"></div>
             <button class="dropdown-item" id="bindGithubBtn">
-              <span class="dropdown-icon">🔗</span> 绑定 GitHub
+              <span class="dropdown-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M12 .5a12 12 0 0 0-3.8 23.38c.6.11.82-.26.82-.58v-2.1c-3.34.73-4.04-1.42-4.04-1.42-.55-1.38-1.33-1.75-1.33-1.75-1.08-.74.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.06 1.82 2.78 1.3 3.46.99.11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.34-5.47-5.96 0-1.32.47-2.39 1.24-3.23-.12-.3-.54-1.53.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6.01 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.23 0 4.63-2.81 5.65-5.49 5.95.43.37.82 1.1.82 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 12 .5Z"/>
+                </svg>
+              </span>
+              <span class="dropdown-item-copy">
+                <span class="dropdown-item-title">绑定 GitHub</span>
+                <span class="dropdown-item-desc">跳转 GitHub 完成授权绑定</span>
+              </span>
+              <span class="dropdown-status">去绑定</span>
             </button>
             <button class="dropdown-item" id="bindEmailBtn">
-              <span class="dropdown-icon">📧</span> 绑定邮箱
+              <span class="dropdown-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="5" width="18" height="14" rx="2"/>
+                  <path d="m3 7 9 6 9-6"/>
+                </svg>
+              </span>
+              <span class="dropdown-item-copy">
+                <span class="dropdown-item-title">绑定邮箱</span>
+                <span class="dropdown-item-desc">为当前账号添加邮箱密码登录</span>
+              </span>
+              <span class="dropdown-status">去绑定</span>
             </button>
             <button class="dropdown-item" id="registerPasskeyBtn">
-              <span class="dropdown-icon">🔐</span> 添加通行密匙
+              <span class="dropdown-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="8" cy="15" r="4"/>
+                  <path d="m12 15 8-8"/>
+                  <path d="m17 8 2 2"/>
+                </svg>
+              </span>
+              <span class="dropdown-item-copy">
+                <span class="dropdown-item-title">通行密匙</span>
+                <span class="dropdown-item-desc">管理无密码登录凭证</span>
+              </span>
+              <span class="dropdown-status">管理</span>
             </button>
             <button class="dropdown-item" id="logoutBtn">
-              <span class="dropdown-icon">🚪</span> 退出登录
+              <span class="dropdown-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                  <path d="M16 17l5-5-5-5"/>
+                  <path d="M21 12H9"/>
+                </svg>
+              </span>
+              <span class="dropdown-item-copy">
+                <span class="dropdown-item-title">退出登录</span>
+                <span class="dropdown-item-desc">结束当前设备会话</span>
+              </span>
             </button>
           </div>
         </div>
@@ -109,6 +167,7 @@
         <input type="search" id="searchInput" class="search-input" placeholder="搜索或输入网址..." autocomplete="search" name="nav-search">
         <button id="searchBtn" class="search-btn">搜索</button>
       </div>
+      <div class="search-suggestions" id="searchSuggestions" role="listbox" aria-label="搜索建议" hidden></div>
       <div class="search-engines">
         <span class="engine-tag active" data-engine="baidu" data-url="https://www.baidu.com/s?wd=">百度</span>
         <span class="engine-tag" data-engine="google" data-url="https://www.google.com/search?q=">Google</span>
@@ -193,6 +252,15 @@
     <div class="modal auth-modal">
       <!-- 登录/注册模式 -->
       <div id="authFormView">
+        <div class="auth-hero">
+          <div class="auth-mark">
+            <img src="icon-180.png" alt="">
+          </div>
+          <div>
+            <h3 class="auth-title" id="authTitle">欢迎回来</h3>
+            <p class="auth-subtitle" id="authSubtitle">同步你的私人导航和常用网站</p>
+          </div>
+        </div>
         <div class="auth-tabs">
           <button class="auth-tab active" id="tabLogin">登录</button>
           <button class="auth-tab" id="tabRegister">注册</button>
@@ -209,20 +277,29 @@
         <button class="btn btn-confirm auth-full-btn" id="authSubmitBtn">登录</button>
         <div class="auth-divider"><span>或</span></div>
         <button class="btn btn-github" id="githubBtn">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-            <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
-          </svg>
-          <span>使用 GitHub 登录</span>
+          <span class="auth-provider-icon">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+              <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+            </svg>
+          </span>
+          <span class="auth-provider-copy">
+            <span>GitHub 登录</span>
+            <small>使用 GitHub 授权继续</small>
+          </span>
         </button>
         <button class="btn btn-passkey" id="passkeyBtn">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            <circle cx="12" cy="16" r="1"/>
-          </svg>
-          <span>通行密匙登录</span>
+          <span class="auth-provider-icon">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8" cy="15" r="4"/>
+              <path d="m12 15 8-8"/>
+              <path d="m17 8 2 2"/>
+            </svg>
+          </span>
+          <span class="auth-provider-copy">
+            <span>通行密匙登录</span>
+            <small>使用已保存的设备凭证</small>
+          </span>
         </button>
-        <p class="passkey-hint">首次使用需先登录账号，然后在菜单中添加通行密匙</p>
       </div>
       <!-- 忘记密码模式 -->
       <div id="resetView" style="display:none;">
@@ -247,6 +324,32 @@
     </div>
   </div>
 
+  <!-- ====== 自定义确认弹窗 ====== -->
+  <div class="modal-overlay" id="confirmModal">
+    <div class="modal modal-sm confirm-dialog">
+      <div class="confirm-badge">!</div>
+      <p class="confirm-message" id="confirmMessage"></p>
+      <div class="modal-actions">
+        <button class="btn btn-cancel" id="confirmCancelBtn">取消</button>
+        <button class="btn btn-danger" id="confirmOkBtn">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== 通行密匙管理弹窗 ====== -->
+  <div class="modal-overlay" id="passkeyModal">
+    <div class="modal modal-wide">
+      <h3 class="modal-title">通行密匙</h3>
+      <div id="passkeyList" class="passkey-list">
+        <p class="passkey-loading">加载中…</p>
+      </div>
+      <div class="modal-actions" style="flex-direction:column;gap:8px;">
+        <button class="btn btn-confirm" id="addPasskeyBtn" style="width:100%;">添加通行密匙</button>
+        <button class="btn btn-cancel" id="passkeyCloseBtn" style="width:100%;">关闭</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast 通知 -->
   <div class="toast-container" id="toastContainer"></div>
 
@@ -255,6 +358,8 @@
   <script src="config.js"></script>
   <script src="db.js"></script>
   <script src="sync.js"></script>
+  <script src="search-utils.js"></script>
+  <script src="bookmark-utils.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -4,6 +4,8 @@ var NavSync = (function () {
   var LS_BOOKMARKS = 'nav_bookmarks';
   var LS_SYNC_TIME = 'nav_last_sync';
   var LS_MERGED = 'nav_cloud_merged';
+  var LS_DELETED_CATEGORIES = 'nav_deleted_categories';
+  var LS_DELETED_BOOKMARKS = 'nav_deleted_bookmarks';
 
   /* ---- 本地存储 ---- */
 
@@ -32,6 +34,70 @@ var NavSync = (function () {
 
   function setMerged() {
     localStorage.setItem(LS_MERGED, 'true');
+  }
+
+  function loadDeleted(key) {
+    try {
+      return JSON.parse(localStorage.getItem(key) || '{}') || {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveDeleted(key, value) {
+    localStorage.setItem(key, JSON.stringify(value || {}));
+  }
+
+  function markDeleted(key, id) {
+    if (!id) return;
+    var deleted = loadDeleted(key);
+    deleted[id] = new Date().toISOString();
+    saveDeleted(key, deleted);
+  }
+
+  function filterDeleted(data) {
+    var deletedCats = loadDeleted(LS_DELETED_CATEGORIES);
+    var deletedBms = loadDeleted(LS_DELETED_BOOKMARKS);
+    return {
+      categories: data.categories.filter(function (cat) {
+        return !deletedCats[cat.id];
+      }),
+      bookmarks: data.bookmarks.filter(function (bm) {
+        return !deletedBms[bm.id] && !deletedCats[bm.category_id];
+      })
+    };
+  }
+
+  async function flushPendingDeletes(remoteData) {
+    var deletedCats = loadDeleted(LS_DELETED_CATEGORIES);
+    var deletedBms = loadDeleted(LS_DELETED_BOOKMARKS);
+    var filteredRemote = filterDeleted(remoteData);
+
+    if (!NavDB.isLoggedIn()) return filteredRemote;
+
+    var bmIds = Object.keys(deletedBms);
+    for (var i = 0; i < bmIds.length; i++) {
+      try {
+        await NavDB.deleteBookmark(bmIds[i]);
+        delete deletedBms[bmIds[i]];
+      } catch (e) {
+        console.warn('云端删除书签失败，保留下次重试:', e.message);
+      }
+    }
+
+    var catIds = Object.keys(deletedCats);
+    for (var j = 0; j < catIds.length; j++) {
+      try {
+        await NavDB.deleteCategory(catIds[j]);
+        delete deletedCats[catIds[j]];
+      } catch (e2) {
+        console.warn('云端删除分类失败，保留下次重试:', e2.message);
+      }
+    }
+
+    saveDeleted(LS_DELETED_BOOKMARKS, deletedBms);
+    saveDeleted(LS_DELETED_CATEGORIES, deletedCats);
+    return filteredRemote;
   }
 
   /* ---- 生成 UUID ---- */
@@ -156,6 +222,7 @@ var NavSync = (function () {
 
     var localData = loadLocal();
     var remoteData = await NavDB.fetchAll();
+    remoteData = await flushPendingDeletes(remoteData);
 
     // 远端无数据 → 把本地推上去
     if (remoteData.categories.length === 0 && remoteData.bookmarks.length === 0) {
@@ -224,6 +291,10 @@ var NavSync = (function () {
 
   function deleteCategoryLocal(id) {
     var data = loadLocal();
+    markDeleted(LS_DELETED_CATEGORIES, id);
+    data.bookmarks.forEach(function (b) {
+      if (b.category_id === id) markDeleted(LS_DELETED_BOOKMARKS, b.id);
+    });
     data.categories = data.categories.filter(function (c) { return c.id !== id; });
     data.bookmarks = data.bookmarks.filter(function (b) { return b.category_id !== id; });
     saveLocal(data);
@@ -263,6 +334,7 @@ var NavSync = (function () {
 
   function deleteBookmarkLocal(id) {
     var data = loadLocal();
+    markDeleted(LS_DELETED_BOOKMARKS, id);
     data.bookmarks = data.bookmarks.filter(function (b) { return b.id !== id; });
     saveLocal(data);
     deleteBookmarkAsync(id);
@@ -284,17 +356,17 @@ var NavSync = (function () {
     });
   }
 
-  function deleteCategoryAsync(id) {
-    if (!NavDB.isLoggedIn()) return;
-    NavDB.deleteCategory(id).catch(function (e) {
-      console.warn('云端删除分类失败:', e.message);
-    });
-  }
-
   function deleteBookmarkAsync(id) {
     if (!NavDB.isLoggedIn()) return;
     NavDB.deleteBookmark(id).catch(function (e) {
       console.warn('云端删除书签失败:', e.message);
+    });
+  }
+
+  function deleteCategoryAsync(id) {
+    if (!NavDB.isLoggedIn()) return;
+    NavDB.deleteCategory(id).catch(function (e) {
+      console.warn('云端删除分类失败:', e.message);
     });
   }
 
