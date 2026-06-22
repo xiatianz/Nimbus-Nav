@@ -1213,7 +1213,8 @@
   }
 
   function faviconUrl(url) {
-    return 'https://www.google.com/s2/favicons?domain=' + getDomain(url) + '&sz=32';
+    // 强制 Google 服务在找不到真实 favicon 时返回 404，从而触发 onerror 进而显示我们自定义的字母 fallback
+    return 'https://www.google.com/s2/favicons?domain=' + getDomain(url) + '&sz=32&default=404';
   }
 
   /* ====== Dropdown Identity Check ====== */
