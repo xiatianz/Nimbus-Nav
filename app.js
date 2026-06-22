@@ -17,7 +17,7 @@
   var categoriesContainer;
   var loginBtn, authModal, authFormView, resetView, confirmView;
   var userMenu, userAvatar, userAvatarBtn, userName, syncDot;
-  var userDropdown, syncBtn, logoutBtn;
+  var userDropdown, logoutBtn;
   var bookmarkModal, categoryModal;
   var toastContainer;
 
@@ -104,7 +104,6 @@
     userName = $('#userName');
     syncDot = $('#syncDot');
     userDropdown = $('#userDropdown');
-    syncBtn = $('#syncBtn');
     logoutBtn = $('#logoutBtn');
     bookmarkModal = $('#bookmarkModal');
     categoryModal = $('#categoryModal');
@@ -467,6 +466,7 @@
     switchAuthTab('login');
     authFormView.style.display = '';
     resetView.style.display = 'none';
+    confirmView.style.display = 'none';
     $('#authEmail').value = '';
     $('#authPassword').value = '';
 
@@ -595,30 +595,6 @@
     } finally {
       btn.disabled = false;
       btn.textContent = '发送重置链接';
-    }
-  }
-
-  /* ====== Sync to Cloud ====== */
-
-  async function manualSync() {
-    if (!NavDB.isLoggedIn()) {
-      showToast('请先登录', 'error');
-      return;
-    }
-
-    syncDot.className = 'sync-dot syncing';
-    showToast('正在同步…');
-    try {
-      var data = await NavSync.syncOnLogin();
-      categories = data.categories;
-      bookmarks = data.bookmarks;
-      renderAll();
-      syncDot.className = 'sync-dot';
-      showToast('同步完成', 'success');
-    } catch (e) {
-      console.error('同步失败:', e);
-      syncDot.className = 'sync-dot error';
-      showToast('同步失败: ' + e.message, 'error');
     }
   }
 
@@ -793,11 +769,6 @@
       if (!userMenu.contains(e.target)) {
         userDropdown.classList.remove('open');
       }
-    });
-
-    syncBtn.addEventListener('click', function () {
-      userDropdown.classList.remove('open');
-      manualSync();
     });
 
     // Register Passkey
