@@ -160,18 +160,16 @@
     }
     userName.textContent = metadata.preferred_username || metadata.name || user.email || '用户';
 
-    showToast('正在同步数据…');
     try {
       var data = await NavSync.syncOnLogin();
       categories = data.categories;
       bookmarks = data.bookmarks;
       renderAll();
-      showToast('同步完成', 'success');
       syncDot.className = 'sync-dot';
     } catch (e) {
       console.error('同步失败:', e);
-      showToast('同步失败，使用本地数据', 'error');
       syncDot.className = 'sync-dot error';
+      showToast('同步失败，请检查网络', 'error');
     }
   }
 
