@@ -45,9 +45,8 @@ body::before {
 
 /* ====== Container ====== */
 .container {
-  max-width: 1400px;
   margin: 0 auto;
-  padding: 40px 28px 72px;
+  padding: 40px 20px 72px;
 }
 
 /* ====== Header ====== */
@@ -848,7 +847,7 @@ body::before {
 
 /* ====== Responsive ====== */
 @media (max-width: 768px) {
-  .container { padding: 28px 16px 48px; }
+  .container { padding: 24px 12px 48px; }
 
   .header {
     flex-direction: column;
