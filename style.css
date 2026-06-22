@@ -29,12 +29,22 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   line-height: 1.5;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ====== Container ====== */
 .container {
   margin: 0 auto;
-  padding: 40px 20px 72px;
+  padding: 40px 20px 0; /* 底部内边距交给 footer 的 margin-top */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+#categoriesContainer {
+  flex: 1;
 }
 
 /* ====== Header ====== */
@@ -1016,8 +1026,9 @@ body {
 
 /* ====== Footer ====== */
 .footer {
-  margin-top: 56px;
+  margin-top: auto;
   padding-top: 24px;
+  padding-bottom: 40px;
   border-top: 1px solid var(--border);
 }
 
