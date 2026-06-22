@@ -9,6 +9,7 @@ var NavDB = (function () {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: false,
+        flowType: 'implicit',
         experimental: {
           passkey: true
         }
@@ -97,6 +98,16 @@ var NavDB = (function () {
   async function exchangeCodeForSession(code) {
     var sb = getClient();
     var _ref = await sb.auth.exchangeCodeForSession(code);
+    if (_ref.error) throw _ref.error;
+    return _ref.data;
+  }
+
+  async function setSession(accessToken, refreshToken) {
+    var sb = getClient();
+    var _ref = await sb.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken
+    });
     if (_ref.error) throw _ref.error;
     return _ref.data;
   }
@@ -250,6 +261,7 @@ var NavDB = (function () {
     registerPasskey: registerPasskey,
     signInWithPasskey: signInWithPasskey,
     exchangeCodeForSession: exchangeCodeForSession,
+    setSession: setSession,
     getUser: getUser,
     isLoggedIn: isLoggedIn,
     onAuthChange: onAuthChange,

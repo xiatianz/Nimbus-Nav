@@ -47,7 +47,6 @@
     });
 
     // 处理邮箱验证回跳 / OAuth 回调
-    // Supabase 可能用 hash（#code=xxx）或 query（?code=xxx）
     var rawHash = window.location.hash;
     var rawSearch = window.location.search;
     var paramStr = rawHash ? rawHash.substring(1) : (rawSearch ? rawSearch.substring(1) : '');
@@ -56,26 +55,26 @@
       var params = new URLSearchParams(paramStr);
       var code = params.get('code');
       var accessToken = params.get('access_token');
+      var refreshToken = params.get('refresh_token');
 
       if (code) {
-        // PKCE 流程：用 code 换 session
         try {
           await NavDB.exchangeCodeForSession(code);
         } catch (e) {
           console.error('Code exchange 失败:', e);
         }
-      } else if (accessToken) {
-        // 非 PKCE 流程：token 直接在 URL 里，Supabase 会自动处理
-        // 只需等 session 建立
-        console.log('检测到 access_token，等待 session 建立');
+      } else if (accessToken && refreshToken) {
+        // Implicit 流程：token 直接在 URL 里，手动建立 session
+        try {
+          await NavDB.setSession(accessToken, refreshToken);
+        } catch (e) {
+          console.error('Set session 失败:', e);
+        }
       }
 
       // 清除 URL 中的 auth 参数
       window.history.replaceState(null, '', window.location.pathname);
     }
-
-    // 等一下让 Supabase 内部处理完成
-    await new Promise(function (r) { setTimeout(r, 300); });
 
     // 获取当前 session
     var user = await NavDB.getSession();
