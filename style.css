@@ -408,6 +408,9 @@ body::before {
 
 .search-input::placeholder { color: var(--text-light); }
 
+.search-input::-webkit-search-cancel-button,
+.search-input::-webkit-search-decoration { -webkit-appearance: none; }
+
 .search-btn {
   flex-shrink: 0;
   padding: 9px 22px;
