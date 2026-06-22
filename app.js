@@ -33,32 +33,42 @@
     bookmarks = local.bookmarks;
     renderAll();
 
-    // 初始化 Supabase 并监听认证状态（含 INITIAL_SESSION）
+    // 初始化 Supabase
     NavDB.init();
+
+    // 先读取 URL hash（在 Supabase 或其他代码干扰之前）
+    var hash = window.location.hash;
+
+    // 监听认证状态变化
     NavDB.onAuthChange(function (event, user) {
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && user) {
-        if (currentUser && currentUser.id === user.id) return; // 避免重复处理
+        if (currentUser && currentUser.id === user.id) return;
         handleLoggedIn(user);
       } else if (event === 'SIGNED_OUT') {
         handleLoggedOut();
       }
     });
 
-    // 处理邮箱验证回跳：URL hash 中可能带有 auth code
-    var hash = window.location.hash;
+    // 处理邮箱验证回跳 / OAuth 回调
     if (hash) {
       var params = new URLSearchParams(hash.substring(1));
       var code = params.get('code');
       if (code) {
         try {
           await NavDB.exchangeCodeForSession(code);
-          // 清除 URL 中的 hash，避免重复处理
-          window.history.replaceState(null, '', window.location.pathname);
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
         } catch (e) {
           console.error('验证链接处理失败:', e);
           showToast('验证链接已过期或无效，请重新注册', 'error');
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
         }
       }
+    }
+
+    // 获取当前 session（可能在 code exchange 后已建立）
+    var user = await NavDB.getSession();
+    if (user) {
+      handleLoggedIn(user);
     }
 
     // 主题

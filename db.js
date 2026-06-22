@@ -8,7 +8,7 @@ var NavDB = (function () {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: false,
         experimental: {
           passkey: true
         }
