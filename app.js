@@ -55,7 +55,11 @@
 
     // 监听认证状态变化
     NavDB.onAuthChange(function (event, user) {
-      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && user) {
+      if (event === 'PASSWORD_RECOVERY') {
+        setTimeout(function() {
+          openUpdatePasswordView();
+        }, 500);
+      } else if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && user) {
         if (currentUser && currentUser.id === user.id) return;
         handleLoggedIn(user);
       } else if (event === 'SIGNED_OUT') {
@@ -77,6 +81,12 @@
       if (code) {
         try {
           await NavDB.exchangeCodeForSession(code);
+          // 在 PKCE 流程中如果 URL 中有 type=recovery 或 recovery_code，显式调起弹窗
+          if (paramStr.indexOf('type=recovery') >= 0 || params.get('type') === 'recovery') {
+            setTimeout(function() {
+              openUpdatePasswordView();
+            }, 500);
+          }
         } catch (e) {
           console.error('Code exchange 失败:', e);
         }
@@ -148,7 +158,13 @@
     currentUser = user;
     loginBtn.style.display = 'none';
     userMenu.style.display = '';
-    closeAuthModal();
+    
+    // 如果正在修改密码界面，不要关闭弹窗
+    var pwdView = document.querySelector('#updatePasswordView');
+    if (!pwdView || pwdView.style.display === 'none') {
+      closeAuthModal();
+    }
+    
     syncDot.className = 'sync-dot syncing';
 
     var metadata = user.user_metadata || {};
