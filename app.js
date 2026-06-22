@@ -517,6 +517,10 @@
       });
       item.addEventListener('mousedown', function (e) {
         e.preventDefault();
+      });
+      item.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
         openSearchSuggestion(suggestion);
       });
 
@@ -541,7 +545,17 @@
 
   function openSearchSuggestion(suggestion) {
     if (!suggestion || !suggestion.url) return;
-    window.location.href = suggestion.url;
+    if (suggestion.type === 'bookmark') {
+      NavBookmark.recordVisit(suggestion.id);
+      if (openMode === 'new') {
+        window.open(suggestion.url, '_blank');
+      } else {
+        window.location.href = suggestion.url;
+      }
+    } else {
+      // Search action (Google, etc.) typically in current tab
+      window.location.href = suggestion.url;
+    }
   }
 
   function applyCardSearchState(query) {
