@@ -62,6 +62,15 @@ var NavDB = (function () {
     currentUser = null;
   }
 
+  async function resetPassword(email) {
+    var sb = getClient();
+    var _ref = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+    if (_ref.error) throw _ref.error;
+    return _ref.data;
+  }
+
   function getUser() {
     return currentUser;
   }
@@ -207,6 +216,7 @@ var NavDB = (function () {
     signUpWithEmail: signUpWithEmail,
     signInWithEmail: signInWithEmail,
     signOut: signOut,
+    resetPassword: resetPassword,
     getUser: getUser,
     isLoggedIn: isLoggedIn,
     onAuthChange: onAuthChange,

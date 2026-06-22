@@ -8,7 +8,6 @@
   var currentEngine = { url: 'https://www.baidu.com/s?wd=' };
   var editingBookmarkId = null;
   var editingCategoryId = null;
-  var isRegisterMode = false;
 
   /* ====== DOM refs ====== */
   var $ = function (sel) { return document.querySelector(sel); };
@@ -16,7 +15,7 @@
 
   var searchInput, searchBtn, engineTags;
   var categoriesContainer;
-  var loginBtn, loginGroup, emailLoginBtn, emailModal;
+  var loginBtn, authModal, authFormView, resetView;
   var userMenu, userAvatar, userAvatarBtn, userName, syncDot;
   var userDropdown, syncBtn, logoutBtn;
   var bookmarkModal, categoryModal;
@@ -57,9 +56,9 @@
     engineTags = $$('.engine-tag');
     categoriesContainer = $('#categoriesContainer');
     loginBtn = $('#loginBtn');
-    loginGroup = $('#loginGroup');
-    emailLoginBtn = $('#emailLoginBtn');
-    emailModal = $('#emailModal');
+    authModal = $('#authModal');
+    authFormView = $('#authFormView');
+    resetView = $('#resetView');
     userMenu = $('#userMenu');
     userAvatar = $('#userAvatar');
     userAvatarBtn = $('#userAvatarBtn');
@@ -77,9 +76,9 @@
 
   async function handleLoggedIn(user) {
     currentUser = user;
-    loginGroup.style.display = 'none';
+    loginBtn.style.display = 'none';
     userMenu.style.display = '';
-    closeEmailModal();
+    closeAuthModal();
     userAvatar.src = user.user_metadata.avatar_url || '';
     userName.textContent = user.user_metadata.preferred_username || user.user_metadata.name || user.email || '用户';
 
@@ -100,7 +99,7 @@
 
   function handleLoggedOut() {
     currentUser = null;
-    loginGroup.style.display = '';
+    loginBtn.style.display = '';
     userMenu.style.display = 'none';
     userDropdown.classList.remove('open');
     NavSync.resetMergeState();
@@ -410,34 +409,48 @@
     }
   }
 
-  /* ====== Email Auth Modal ====== */
+  /* ====== Unified Auth Modal ====== */
 
-  function openEmailModal() {
-    isRegisterMode = false;
-    updateEmailModalUI();
+  function openAuthModal() {
+    switchAuthTab('login');
+    authFormView.style.display = '';
+    resetView.style.display = 'none';
     $('#authEmail').value = '';
     $('#authPassword').value = '';
-    emailModal.classList.add('active');
+    authModal.classList.add('active');
     setTimeout(function () { $('#authEmail').focus(); }, 100);
   }
 
-  function closeEmailModal() {
-    emailModal.classList.remove('active');
+  function closeAuthModal() {
+    authModal.classList.remove('active');
   }
 
-  function toggleEmailMode() {
-    isRegisterMode = !isRegisterMode;
-    updateEmailModalUI();
+  function switchAuthTab(mode) {
+    var tabLogin = $('#tabLogin');
+    var tabRegister = $('#tabRegister');
+    var submitBtn = $('#authSubmitBtn');
+    var forgotLink = $('#forgotLink');
+
+    if (mode === 'register') {
+      tabLogin.classList.remove('active');
+      tabRegister.classList.add('active');
+      submitBtn.textContent = '注册';
+      forgotLink.style.display = 'none';
+      $('#authPassword').setAttribute('autocomplete', 'new-password');
+    } else {
+      tabRegister.classList.remove('active');
+      tabLogin.classList.add('active');
+      submitBtn.textContent = '登录';
+      forgotLink.style.display = '';
+      $('#authPassword').setAttribute('autocomplete', 'current-password');
+    }
   }
 
-  function updateEmailModalUI() {
-    $('#emailModalTitle').textContent = isRegisterMode ? '注册账号' : '邮箱登录';
-    $('#emailSubmitBtn').textContent = isRegisterMode ? '注册' : '登录';
-    $('#authSwitchText').textContent = isRegisterMode ? '已有账号？' : '还没有账号？';
-    $('#authSwitchLink').textContent = isRegisterMode ? '去登录' : '立即注册';
+  function isRegisterMode() {
+    return $('#tabRegister').classList.contains('active');
   }
 
-  async function submitEmailAuth() {
+  async function submitAuth() {
     var email = $('#authEmail').value.trim();
     var password = $('#authPassword').value;
 
@@ -451,18 +464,18 @@
       return;
     }
 
-    var submitBtn = $('#emailSubmitBtn');
+    var submitBtn = $('#authSubmitBtn');
     submitBtn.disabled = true;
     submitBtn.textContent = '处理中…';
 
     try {
-      if (isRegisterMode) {
+      if (isRegisterMode()) {
         var result = await NavDB.signUpWithEmail(email, password);
         if (result.session) {
           showToast('注册成功', 'success');
         } else {
           showToast('注册成功，请检查邮箱完成验证', 'success');
-          closeEmailModal();
+          closeAuthModal();
         }
       } else {
         await NavDB.signInWithEmail(email, password);
@@ -475,7 +488,45 @@
       showToast(msg, 'error');
     } finally {
       submitBtn.disabled = false;
-      submitBtn.textContent = isRegisterMode ? '注册' : '登录';
+      submitBtn.textContent = isRegisterMode() ? '注册' : '登录';
+    }
+  }
+
+  function showResetView() {
+    authFormView.style.display = 'none';
+    resetView.style.display = '';
+    var emailVal = $('#authEmail').value.trim();
+    $('#resetEmail').value = emailVal;
+    setTimeout(function () { $('#resetEmail').focus(); }, 100);
+  }
+
+  function showLoginView() {
+    resetView.style.display = 'none';
+    authFormView.style.display = '';
+    switchAuthTab('login');
+    setTimeout(function () { $('#authEmail').focus(); }, 100);
+  }
+
+  async function submitResetPassword() {
+    var email = $('#resetEmail').value.trim();
+    if (!email) {
+      showToast('请填写邮箱', 'error');
+      return;
+    }
+
+    var btn = $('#resetSubmitBtn');
+    btn.disabled = true;
+    btn.textContent = '发送中…';
+
+    try {
+      await NavDB.resetPassword(email);
+      showToast('重置链接已发送，请检查邮箱', 'success');
+      setTimeout(function () { showLoginView(); }, 1500);
+    } catch (e) {
+      showToast(e.message || '发送失败', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '发送重置链接';
     }
   }
 
@@ -591,26 +642,37 @@
       });
     });
 
-    // Auth
-    loginBtn.addEventListener('click', function () {
+    // Auth - unified login button opens modal
+    loginBtn.addEventListener('click', openAuthModal);
+
+    // Auth modal - tabs
+    $('#tabLogin').addEventListener('click', function () { switchAuthTab('login'); });
+    $('#tabRegister').addEventListener('click', function () { switchAuthTab('register'); });
+
+    // Auth modal - submit
+    $('#authSubmitBtn').addEventListener('click', submitAuth);
+    $('#authPassword').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') submitAuth();
+    });
+
+    // Auth modal - GitHub
+    $('#githubBtn').addEventListener('click', function () {
       NavDB.signInWithGitHub().catch(function (e) {
         showToast('登录失败: ' + e.message, 'error');
       });
     });
 
-    // Email auth
-    emailLoginBtn.addEventListener('click', openEmailModal);
-    $('#emailCancelBtn').addEventListener('click', closeEmailModal);
-    $('#emailSubmitBtn').addEventListener('click', submitEmailAuth);
-    $('#authSwitchLink').addEventListener('click', function (e) {
-      e.preventDefault();
-      toggleEmailMode();
+    // Auth modal - forgot password
+    $('#forgotLink').addEventListener('click', function () { showResetView(); });
+    $('#resetSubmitBtn').addEventListener('click', submitResetPassword);
+    $('#backToLogin').addEventListener('click', function () { showLoginView(); });
+    $('#resetEmail').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') submitResetPassword();
     });
-    emailModal.addEventListener('click', function (e) {
-      if (e.target === emailModal) closeEmailModal();
-    });
-    $('#authPassword').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') submitEmailAuth();
+
+    // Auth modal - close
+    authModal.addEventListener('click', function (e) {
+      if (e.target === authModal) closeAuthModal();
     });
 
     userAvatarBtn.addEventListener('click', function (e) {
@@ -670,7 +732,7 @@
       if (e.key === 'Escape') {
         if (bookmarkModal.classList.contains('active')) closeBookmarkModal();
         if (categoryModal.classList.contains('active')) closeCategoryModal();
-        if (emailModal.classList.contains('active')) closeEmailModal();
+        if (authModal.classList.contains('active')) closeAuthModal();
         userDropdown.classList.remove('open');
       }
     });
