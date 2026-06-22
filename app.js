@@ -370,17 +370,30 @@
     fallback.className = 'card-icon-fallback';
     fallback.textContent = NavBookmarks.getBookmarkInitial(bm);
     var img = document.createElement('img');
-    img.src = faviconUrl(bm.url);
     img.alt = '';
     img.style.display = 'none';
+    var faviconCandidates = NavBookmarks.getFaviconCandidates(bm.url);
+    var faviconIndex = 0;
+    function showFallbackIcon() {
+      img.style.display = 'none';
+      fallback.style.display = '';
+    }
+    function loadNextFavicon() {
+      if (faviconIndex >= faviconCandidates.length) {
+        showFallbackIcon();
+        return;
+      }
+      img.src = faviconCandidates[faviconIndex];
+      faviconIndex += 1;
+    }
     img.onload = function () {
       fallback.style.display = 'none';
       img.style.display = 'block';
     };
     img.onerror = function () {
-      img.style.display = 'none';
-      fallback.style.display = '';
+      loadNextFavicon();
     };
+    loadNextFavicon();
     iconWrap.appendChild(fallback);
     iconWrap.appendChild(img);
 
@@ -1210,11 +1223,6 @@
     } catch (e) {
       return '';
     }
-  }
-
-  function faviconUrl(url) {
-    // 强制 Google 服务在找不到真实 favicon 时返回 404，从而触发 onerror 进而显示我们自定义的字母 fallback
-    return 'https://www.google.com/s2/favicons?domain=' + getDomain(url) + '&sz=32&default=404';
   }
 
   /* ====== Dropdown Identity Check ====== */

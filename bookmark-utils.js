@@ -9,9 +9,39 @@
 
   function getDomain(url) {
     try {
-      return String(url || '').replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
+      var value = normalizeBookmarkUrl(url);
+      return new URL(value).hostname.replace(/^www\./, '');
     } catch (e) {
-      return '';
+      try {
+        return String(url || '').replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
+      } catch (err) {
+        return '';
+      }
+    }
+  }
+
+  function normalizeBookmarkUrl(url) {
+    var value = String(url || '').trim();
+    if (!value) return '';
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
+      value = 'https://' + value;
+    }
+    return value;
+  }
+
+  function getFaviconCandidates(url) {
+    try {
+      var value = normalizeBookmarkUrl(url);
+      var parsed = new URL(value);
+      if (!/^https?:$/.test(parsed.protocol)) return [];
+
+      var domain = parsed.hostname.replace(/^www\./, '');
+      return [
+        parsed.origin + '/favicon.ico',
+        'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=32&default=404'
+      ];
+    } catch (e) {
+      return [];
     }
   }
 
@@ -42,6 +72,7 @@
 
   return {
     getDomain: getDomain,
+    getFaviconCandidates: getFaviconCandidates,
     getBookmarkInitial: getBookmarkInitial,
     getTopVisitedBookmarks: getTopVisitedBookmarks
   };

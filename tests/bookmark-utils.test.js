@@ -8,6 +8,16 @@ function testInitialUsesNameFirst() {
   }), 'F');
 }
 
+function testFaviconCandidatesPreferSiteFavicon() {
+  assert.deepStrictEqual(
+    NavBookmarks.getFaviconCandidates('github.com/explore'),
+    [
+      'https://github.com/favicon.ico',
+      'https://www.google.com/s2/favicons?domain=github.com&sz=32&default=404'
+    ]
+  );
+}
+
 function testRecentBookmarksSortByLastVisit() {
   const bookmarks = [
     { id: 'a', name: 'Alpha', url: 'https://a.com' },
@@ -28,6 +38,7 @@ function testRecentBookmarksSortByLastVisit() {
 
 function run() {
   testInitialUsesNameFirst();
+  testFaviconCandidatesPreferSiteFavicon();
   testRecentBookmarksSortByLastVisit();
   console.log('bookmark utils tests passed');
 }
