@@ -676,15 +676,33 @@
       var btn = this;
       btn.disabled = true;
       btn.querySelector('span').textContent = '验证中…';
+
+      // 设置 60 秒超时
+      var timeoutId;
+      var timeoutPromise = new Promise(function (_, reject) {
+        timeoutId = setTimeout(function () {
+          reject(new Error('TimeoutError'));
+        }, 60000);
+      });
+
       try {
-        await NavDB.signInWithPasskey();
+        await Promise.race([
+          NavDB.signInWithPasskey(),
+          timeoutPromise
+        ]);
+        clearTimeout(timeoutId);
         showToast('Passkey 登录成功', 'success');
       } catch (e) {
+        clearTimeout(timeoutId);
         var msg = e.message || 'Passkey 登录失败';
         if (msg.indexOf('NotAllowedError') >= 0 || msg.indexOf('cancelled') >= 0) {
           msg = 'Passkey 验证已取消';
+        } else if (msg.indexOf('TimeoutError') >= 0) {
+          msg = '验证超时，请检查设备或确认已注册 Passkey';
         } else if (msg.indexOf('not supported') >= 0 || msg.indexOf('WebAuthn') >= 0) {
           msg = '当前浏览器或环境不支持 Passkey';
+        } else if (msg.indexOf('InvalidStateError') >= 0 || msg.indexOf('credential') >= 0) {
+          msg = '未找到已注册的 Passkey，请先使用邮箱登录';
         }
         showToast(msg, 'error');
       } finally {

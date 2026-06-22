@@ -234,6 +234,14 @@ body::before {
 
 .btn-passkey svg { flex-shrink: 0; }
 
+.passkey-hint {
+  margin: 8px 0 0;
+  font-size: 0.72rem;
+  color: var(--text-light);
+  text-align: center;
+  line-height: 1.4;
+}
+
 .auth-hint {
   font-size: 0.82rem;
   color: var(--text-light);
