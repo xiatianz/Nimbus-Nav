@@ -3,12 +3,61 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nimbus Nav</title>
+  <title>Nimbus Nav - 私人云导航，跨设备书签同步</title>
+  <meta name="description" content="Nimbus Nav 是你的私人导航站，支持书签分类管理、多搜索引擎切换、跨设备云端同步。支持邮箱、GitHub、Passkey 多种登录方式，数据安全加密。">
+  <meta name="keywords" content="导航站,书签管理,云同步,网址导航,个人导航,bookmark,导航网站,在线书签">
+  <meta name="author" content="Nimbus Nav">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://nav.ehon.cn/">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Nimbus Nav - 私人云导航，跨设备书签同步">
+  <meta property="og:description" content="你的私人导航站，书签分类管理、多搜索引擎、跨设备云端同步，支持 Passkey 安全登录。">
+  <meta property="og:image" content="https://nav.ehon.cn/icon-512.png">
+  <meta property="og:url" content="https://nav.ehon.cn/">
+  <meta property="og:site_name" content="Nimbus Nav">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Nimbus Nav - 私人云导航，跨设备书签同步">
+  <meta name="twitter:description" content="你的私人导航站，书签分类管理、多搜索引擎、跨设备云端同步，支持 Passkey 安全登录。">
+  <meta name="twitter:image" content="https://nav.ehon.cn/icon-512.png">
+
+  <!-- Theme & Mobile -->
+  <meta name="theme-color" content="#3b82f6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Nimbus Nav">
+
+  <!-- Favicon -->
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+  <link rel="manifest" href="manifest.json">
+
   <link rel="stylesheet" href="style.css">
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Nimbus Nav",
+    "url": "https://nav.ehon.cn",
+    "description": "私人云导航站，支持书签分类管理、多搜索引擎切换、跨设备云端同步",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "Web",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "CNY"
+    },
+    "featureList": "书签管理, 分类管理, 云端同步, 多搜索引擎, Passkey登录"
+  }
+  </script>
 </head>
 <body>
   <div class="container">
@@ -54,7 +103,7 @@
           <circle cx="11" cy="11" r="8"/>
           <path d="m21 21-4.35-4.35"/>
         </svg>
-        <input type="text" id="searchInput" class="search-input" placeholder="搜索或输入网址...">
+        <input type="text" id="searchInput" class="search-input" placeholder="搜索或输入网址..." autocomplete="off">
         <button id="searchBtn" class="search-btn">搜索</button>
       </div>
       <div class="search-engines">
@@ -70,8 +119,23 @@
 
     <!-- 页脚 -->
     <footer class="footer">
-      <div class="footer-neumorph">
-        <p>Nimbus Nav &copy; 2026 · Neumorphism Design</p>
+      <div class="footer-top">
+        <div class="footer-brand">
+          <div class="footer-logo">
+            <img src="icon-180.png" alt="Nimbus Nav" class="footer-logo-icon">
+            <span>Nimbus Nav</span>
+          </div>
+          <p class="footer-tagline">你的私人导航，书签永不丢失</p>
+        </div>
+        <div class="footer-features">
+          <span class="footer-feature">🔖 书签分类管理</span>
+          <span class="footer-feature">☁️ 跨设备云同步</span>
+          <span class="footer-feature">🔐 Passkey 安全登录</span>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>&copy; 2026 Nimbus Nav</span>
+        <a href="https://github.com/xiatianz/Nimbus-Nav" target="_blank" rel="noopener" class="footer-link">GitHub</a>
       </div>
     </footer>
   </div>
@@ -167,6 +231,15 @@
         </div>
         <button class="btn btn-confirm auth-full-btn" id="resetSubmitBtn">发送重置链接</button>
         <div class="auth-back" id="backToLogin">← 返回登录</div>
+      </div>
+
+      <!-- 注册成功确认模式 -->
+      <div id="confirmView" style="display:none;">
+        <div class="confirm-icon">📬</div>
+        <h3 class="modal-title">验证邮件已发送</h3>
+        <p class="auth-hint">我们已向 <strong id="confirmEmail"></strong> 发送了验证链接，请打开邮箱点击链接完成注册。</p>
+        <p class="auth-hint" style="margin-top:8px;color:var(--text-light);">如果没有收到，请检查垃圾邮件文件夹。</p>
+        <button class="btn btn-confirm auth-full-btn" id="confirmCloseBtn">我知道了</button>
       </div>
     </div>
   </div>

@@ -259,6 +259,13 @@ body::before {
 
 .auth-back:hover { text-decoration: underline; }
 
+.confirm-icon {
+  font-size: 3rem;
+  text-align: center;
+  margin-bottom: 12px;
+  line-height: 1;
+}
+
 /* ====== User Menu ====== */
 .user-menu { position: relative; }
 
@@ -656,18 +663,75 @@ body::before {
 
 /* ====== Footer ====== */
 .footer {
-  text-align: center;
-  margin-top: 48px;
+  margin-top: 56px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
 }
 
-.footer-neumorph {
-  display: inline-block;
-  padding: 10px 20px;
-  border-radius: var(--radius-sm);
-  color: var(--text-light);
-  font-size: 0.78rem;
-  border: 1px solid var(--border);
+.footer-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
+
+.footer-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.footer-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.footer-logo-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.footer-tagline {
+  font-size: 0.78rem;
+  color: var(--text-light);
+}
+
+.footer-features {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.footer-feature {
+  font-size: 0.75rem;
+  color: var(--text-light);
+  white-space: nowrap;
+}
+
+.footer-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20px;
+  padding: 12px 0;
+  font-size: 0.72rem;
+  color: var(--text-light);
+  border-top: 1px solid var(--border);
+}
+
+.footer-link {
+  color: var(--text-light);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.15s;
+}
+
+.footer-link:hover { color: var(--primary); }
 
 /* ====== Modal ====== */
 .modal-overlay {
@@ -883,6 +947,15 @@ body::before {
   .search-wrapper { margin-bottom: 32px; }
   .category-actions { opacity: 1; }
   .card .card-actions { display: flex; }
+
+  .footer-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .footer-features {
+    gap: 10px;
+  }
 }
 
 /* ====== Dark Mode ====== */

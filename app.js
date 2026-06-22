@@ -15,7 +15,7 @@
 
   var searchInput, searchBtn, engineTags;
   var categoriesContainer;
-  var loginBtn, authModal, authFormView, resetView;
+  var loginBtn, authModal, authFormView, resetView, confirmView;
   var userMenu, userAvatar, userAvatarBtn, userName, syncDot;
   var userDropdown, syncBtn, logoutBtn;
   var bookmarkModal, categoryModal;
@@ -44,6 +44,23 @@
       }
     });
 
+    // 处理邮箱验证回跳：URL hash 中可能带有 auth code
+    var hash = window.location.hash;
+    if (hash) {
+      var params = new URLSearchParams(hash.substring(1));
+      var code = params.get('code');
+      if (code) {
+        try {
+          await NavDB.exchangeCodeForSession(code);
+          // 清除 URL 中的 hash，避免重复处理
+          window.history.replaceState(null, '', window.location.pathname);
+        } catch (e) {
+          console.error('验证链接处理失败:', e);
+          showToast('验证链接已过期或无效，请重新注册', 'error');
+        }
+      }
+    }
+
     // 主题
     initTheme();
     // 时钟
@@ -59,6 +76,7 @@
     authModal = $('#authModal');
     authFormView = $('#authFormView');
     resetView = $('#resetView');
+    confirmView = $('#confirmView');
     userMenu = $('#userMenu');
     userAvatar = $('#userAvatar');
     userAvatarBtn = $('#userAvatarBtn');
@@ -483,8 +501,7 @@
         if (result.session) {
           showToast('注册成功', 'success');
         } else {
-          showToast('注册成功，请检查邮箱完成验证', 'success');
-          closeAuthModal();
+          showConfirmView(email);
         }
       } else {
         await NavDB.signInWithEmail(email, password);
@@ -511,9 +528,17 @@
 
   function showLoginView() {
     resetView.style.display = 'none';
+    confirmView.style.display = 'none';
     authFormView.style.display = '';
     switchAuthTab('login');
     setTimeout(function () { $('#authEmail').focus(); }, 100);
+  }
+
+  function showConfirmView(email) {
+    authFormView.style.display = 'none';
+    resetView.style.display = 'none';
+    confirmView.style.display = '';
+    $('#confirmEmail').textContent = email;
   }
 
   async function submitResetPassword() {
@@ -587,19 +612,19 @@
   /* ====== Clock ====== */
 
   function initClock() {
-    var clockEl = document.createElement('div');
-    clockEl.className = 'footer-neumorph';
-    clockEl.style.marginTop = '16px';
-    clockEl.style.fontSize = '0.85rem';
-    var footer = $('.footer');
-    footer.appendChild(clockEl);
+    var clockEl = document.createElement('span');
+    clockEl.id = 'footerClock';
+    clockEl.style.fontSize = '0.72rem';
+    clockEl.style.color = 'var(--text-light)';
+    var footerBottom = $('.footer-bottom');
+    footerBottom.insertBefore(clockEl, footerBottom.firstChild);
 
     function tick() {
       var now = new Date();
       var h = String(now.getHours()).padStart(2, '0');
       var m = String(now.getMinutes()).padStart(2, '0');
       var s = String(now.getSeconds()).padStart(2, '0');
-      clockEl.textContent = '🕐 ' + h + ':' + m + ':' + s;
+      clockEl.textContent = h + ':' + m + ':' + s;
     }
     tick();
     setInterval(tick, 1000);
@@ -715,6 +740,7 @@
     $('#forgotLink').addEventListener('click', function () { showResetView(); });
     $('#resetSubmitBtn').addEventListener('click', submitResetPassword);
     $('#backToLogin').addEventListener('click', function () { showLoginView(); });
+    $('#confirmCloseBtn').addEventListener('click', closeAuthModal);
     $('#resetEmail').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') submitResetPassword();
     });

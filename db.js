@@ -47,7 +47,13 @@ var NavDB = (function () {
 
   async function signUpWithEmail(email, password) {
     var sb = getClient();
-    var _ref = await sb.auth.signUp({ email: email, password: password });
+    var _ref = await sb.auth.signUp({
+      email: email,
+      password: password,
+      options: {
+        emailRedirectTo: 'https://nav.ehon.cn'
+      }
+    });
     if (_ref.error) throw _ref.error;
     return _ref.data;
   }
@@ -84,6 +90,13 @@ var NavDB = (function () {
   async function signInWithPasskey() {
     var sb = getClient();
     var _ref = await sb.auth.signInWithPasskey();
+    if (_ref.error) throw _ref.error;
+    return _ref.data;
+  }
+
+  async function exchangeCodeForSession(code) {
+    var sb = getClient();
+    var _ref = await sb.auth.exchangeCodeForSession(code);
     if (_ref.error) throw _ref.error;
     return _ref.data;
   }
@@ -236,6 +249,7 @@ var NavDB = (function () {
     resetPassword: resetPassword,
     registerPasskey: registerPasskey,
     signInWithPasskey: signInWithPasskey,
+    exchangeCodeForSession: exchangeCodeForSession,
     getUser: getUser,
     isLoggedIn: isLoggedIn,
     onAuthChange: onAuthChange,
