@@ -36,9 +36,6 @@
     // 初始化 Supabase
     NavDB.init();
 
-    // 先读取 URL hash（在 Supabase 或其他代码干扰之前）
-    var hash = window.location.hash;
-
     // 监听认证状态变化
     NavDB.onAuthChange(function (event, user) {
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && user) {
@@ -50,22 +47,37 @@
     });
 
     // 处理邮箱验证回跳 / OAuth 回调
-    if (hash) {
-      var params = new URLSearchParams(hash.substring(1));
+    // Supabase 可能用 hash（#code=xxx）或 query（?code=xxx）
+    var rawHash = window.location.hash;
+    var rawSearch = window.location.search;
+    var paramStr = rawHash ? rawHash.substring(1) : (rawSearch ? rawSearch.substring(1) : '');
+
+    if (paramStr) {
+      var params = new URLSearchParams(paramStr);
       var code = params.get('code');
+      var accessToken = params.get('access_token');
+
       if (code) {
+        // PKCE 流程：用 code 换 session
         try {
           await NavDB.exchangeCodeForSession(code);
-          window.history.replaceState(null, '', window.location.pathname + window.location.search);
         } catch (e) {
-          console.error('验证链接处理失败:', e);
-          showToast('验证链接已过期或无效，请重新注册', 'error');
-          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+          console.error('Code exchange 失败:', e);
         }
+      } else if (accessToken) {
+        // 非 PKCE 流程：token 直接在 URL 里，Supabase 会自动处理
+        // 只需等 session 建立
+        console.log('检测到 access_token，等待 session 建立');
       }
+
+      // 清除 URL 中的 auth 参数
+      window.history.replaceState(null, '', window.location.pathname);
     }
 
-    // 获取当前 session（可能在 code exchange 后已建立）
+    // 等一下让 Supabase 内部处理完成
+    await new Promise(function (r) { setTimeout(r, 300); });
+
+    // 获取当前 session
     var user = await NavDB.getSession();
     if (user) {
       handleLoggedIn(user);
@@ -107,7 +119,20 @@
     loginBtn.style.display = 'none';
     userMenu.style.display = '';
     closeAuthModal();
-    userAvatar.src = user.user_metadata.avatar_url || '';
+
+    var avatarUrl = user.user_metadata.avatar_url;
+    if (avatarUrl) {
+      userAvatar.src = avatarUrl;
+      userAvatar.style.display = '';
+    } else {
+      var name = user.user_metadata.preferred_username || user.user_metadata.name || user.email || 'U';
+      var initial = name.charAt(0).toUpperCase();
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36">'
+        + '<rect width="36" height="36" rx="18" fill="#3b82f6"/>'
+        + '<text x="18" y="24" text-anchor="middle" fill="#fff" font-size="16" font-weight="600" font-family="sans-serif">' + initial + '</text>'
+        + '</svg>';
+      userAvatar.src = 'data:image/svg+xml,' + encodeURIComponent(svg);
+    }
     userName.textContent = user.user_metadata.preferred_username || user.user_metadata.name || user.email || '用户';
 
     showToast('正在同步数据…');
