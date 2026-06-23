@@ -99,11 +99,32 @@
     var description = String(bookmark.description || '').toLowerCase();
     var domain = getDomain(bookmark.url).toLowerCase();
     var url = String(bookmark.url || '').toLowerCase();
+    var haystack = name + ' ' + domain + ' ' + description + ' ' + url;
 
+    // Exact or prefix match on name/domain
     if (name === q || domain === q) return 100;
     if (name.indexOf(q) === 0 || domain.indexOf(q) === 0) return 80;
+
+    // Full query substring match
     if (name.indexOf(q) >= 0 || domain.indexOf(q) >= 0) return 60;
     if (description.indexOf(q) >= 0 || url.indexOf(q) >= 0) return 40;
+
+    // Multi-word: every word in query must appear somewhere
+    var words = q.split(/\s+/).filter(function (w) { return w.length > 0; });
+    if (words.length > 1) {
+      var allMatch = words.every(function (w) {
+        return haystack.indexOf(w) >= 0;
+      });
+      if (allMatch) return 35;
+    }
+
+    // Initial-letter matching: check if query chars match starting letters of name words
+    var nameWords = name.split(/[\s\-_./]+/).filter(function (w) { return w.length > 0; });
+    if (q.length >= 2 && q.length <= nameWords.length) {
+      var initials = nameWords.map(function (w) { return w.charAt(0); }).join('');
+      if (initials.indexOf(q) >= 0) return 30;
+    }
+
     return 0;
   }
 

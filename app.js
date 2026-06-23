@@ -655,15 +655,15 @@
 
   function openSearchSuggestion(suggestion) {
     if (!suggestion || !suggestion.url) return;
+    closeSearchSuggestions();
     if (suggestion.type === 'bookmark') {
-      NavBookmark.recordVisit(suggestion.id);
+      if (suggestion.bookmark) recordBookmarkVisit(suggestion.bookmark.id);
       if (openMode === 'new') {
         window.open(suggestion.url, '_blank');
       } else {
         window.location.href = suggestion.url;
       }
     } else {
-      // Search action (Google, etc.) typically in current tab
       window.location.href = suggestion.url;
     }
   }
