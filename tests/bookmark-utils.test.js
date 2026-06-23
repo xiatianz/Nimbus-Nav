@@ -36,6 +36,11 @@ function testFaviconCandidatesIncludeKnownBrandIconFallback() {
 }
 
 function testFaviconCandidatesIncludeUnavatarFallback() {
+
+function testFaviconCandidatesIncludeFaviconIm() {
+  const candidates = NavBookmarks.getFaviconCandidates('https://example.com/docs');
+  assert(candidates.includes('https://favicon.im/example.com'));
+}
   const candidates = NavBookmarks.getFaviconCandidates('https://example.com/docs');
 
   assert(candidates.includes('https://unavatar.io/example.com'));
@@ -66,6 +71,12 @@ function run() {
   testFaviconCandidatesIncludeKnownExternalIconHost();
   testFaviconCandidatesIncludeKnownBrandIconFallback();
   testFaviconCandidatesIncludeUnavatarFallback();
+  testFaviconCandidatesIncludeFaviconIm();
+
+function testFaviconCandidatesIncludeFaviconIm() {
+  const candidates = NavBookmarks.getFaviconCandidates('https://example.com/docs');
+  assert(candidates.includes('https://favicon.im/example.com'));
+}
   testRecentBookmarksSortByLastVisit();
   console.log('bookmark utils tests passed');
 }

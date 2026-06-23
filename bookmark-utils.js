@@ -79,6 +79,7 @@
       COMMON_FAVICON_PATHS.forEach(function (path) {
         candidates.push(parsed.origin + path);
       });
+      candidates.push('https://favicon.im/' + parsed.hostname.replace(/^www./, ''));
       candidates.push('https://unavatar.io/' + parsed.hostname.replace(/^www\./, ''));
       return candidates.filter(function (candidate) {
         if (seen[candidate]) return false;
