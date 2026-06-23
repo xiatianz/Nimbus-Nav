@@ -168,12 +168,9 @@
         <button id="searchBtn" class="search-btn">搜索</button>
       </div>
       <div class="search-suggestions" id="searchSuggestions" role="listbox" aria-label="搜索建议" hidden></div>
-      <div class="search-engines">
-        <span class="engine-tag active" data-engine="baidu" data-url="https://www.baidu.com/s?wd=">百度</span>
-        <span class="engine-tag" data-engine="google" data-url="https://www.google.com/search?q=">Google</span>
-        <span class="engine-tag" data-engine="bing" data-url="https://www.bing.com/search?q=">Bing</span>
-        <span class="engine-tag" data-engine="duckduckgo" data-url="https://duckduckgo.com/?q=">DuckDuckGo</span>
+      <div class="search-engines" id="searchEnginesContainer">
       </div>
+
     </div>
 
     <!-- 动态分类容器 -->
@@ -238,6 +235,28 @@
       <input type="hidden" id="bmEditId">
     </div>
   </div>
+
+  <!-- ====== 添加/编辑引擎弹窗 ====== -->
+  <div class="modal-overlay" id="engineModal">
+    <div class="modal">
+      <h3 class="modal-title" id="engineModalTitle">添加引擎</h3>
+      <div class="form-group">
+        <label>名称</label>
+        <input type="text" id="engineName" class="form-input" placeholder="例如：Google">
+      </div>
+      <div class="form-group">
+        <label>搜索URL (包含查询参数)</label>
+        <input type="text" id="engineUrl" class="form-input" placeholder="例如：https://google.com/search?q=">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-cancel" id="engineDeleteBtn" style="display:none; color: var(--danger); margin-right: auto;">删除</button>
+        <button class="btn btn-cancel" id="engineCancelBtn">取消</button>
+        <button class="btn btn-confirm" id="engineConfirmBtn">确认</button>
+      </div>
+      <input type="hidden" id="engineEditId">
+    </div>
+  </div>
+
 
   <!-- ====== 添加/编辑分类弹窗 ====== -->
   <div class="modal-overlay" id="categoryModal">
@@ -381,11 +400,11 @@
 
   <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20260623e"></script>
-  <script src="db.js?v=20260623e"></script>
-  <script src="sync.js?v=20260623e"></script>
-  <script src="search-utils.js?v=20260623e"></script>
-  <script src="bookmark-utils.js?v=20260623e"></script>
-  <script src="app.js?v=20260623e"></script>
+  <script src="config.js?v=20260623f"></script>
+  <script src="db.js?v=20260623f"></script>
+  <script src="sync.js?v=20260623f"></script>
+  <script src="search-utils.js?v=20260623f"></script>
+  <script src="bookmark-utils.js?v=20260623f"></script>
+  <script src="app.js?v=20260623f"></script>
 </body>
 </html>

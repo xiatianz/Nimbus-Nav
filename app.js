@@ -4,8 +4,9 @@
   /* ====== State ====== */
   var categories = [];
   var bookmarks = [];
+  var searchEngines = [];
   var currentUser = null;
-  var currentEngine = { url: 'https://www.baidu.com/s?wd=' };
+  var currentEngine = null;
   var editingBookmarkId = null;
   var editingCategoryId = null;
   var confirmCallback = null;
@@ -15,6 +16,8 @@
   var visitStats = {};
   var openMode = 'new';
   var draggedBookmarkId = null;
+  var draggedEngineId = null;
+
   var draggedCategoryId = null;
 
   var LS_VISIT_STATS = 'nav_visit_stats';
@@ -45,6 +48,7 @@
     var local = NavSync.loadLocal();
     categories = local.categories;
     bookmarks = local.bookmarks;
+    searchEngines = local.searchEngines || [];
     visitStats = loadVisitStats();
     openMode = localStorage.getItem(LS_OPEN_MODE) || 'new';
     updateOpenModeButtons();
@@ -143,6 +147,15 @@
     logoutBtn = $('#logoutBtn');
     bookmarkModal = $('#bookmarkModal');
     categoryModal = $('#categoryModal');
+    engineModal = $('#engineModal');
+    engineModalTitle = $('#engineModalTitle');
+    engineNameInput = $('#engineName');
+    engineUrlInput = $('#engineUrl');
+    engineDeleteBtn = $('#engineDeleteBtn');
+    engineCancelBtn = $('#engineCancelBtn');
+    engineConfirmBtn = $('#engineConfirmBtn');
+    engineEditIdInput = $('#engineEditId');
+
     confirmModal = $('#confirmModal');
     confirmMessage = $('#confirmMessage');
     confirmOkBtn = $('#confirmOkBtn');
@@ -187,6 +200,8 @@
       var data = await NavSync.syncOnLogin();
       categories = data.categories;
       bookmarks = data.bookmarks;
+      searchEngines = data.searchEngines || [];
+      renderSearchEngines();
       renderAll();
       syncDot.className = 'sync-dot';
     } catch (e) {
@@ -207,7 +222,92 @@
 
   /* ====== Rendering ====== */
 
+  function renderSearchEngines() {
+  function moveEngine(sourceId, targetId) {
+    var sourceIdx = searchEngines.findIndex(function(e) { return e.id === sourceId; });
+    var targetIdx = searchEngines.findIndex(function(e) { return e.id === targetId; });
+    if (sourceIdx < 0 || targetIdx < 0) return;
+    var moving = searchEngines.splice(sourceIdx, 1)[0];
+    searchEngines.splice(targetIdx, 0, moving);
+    searchEngines.forEach(function(e, i) {
+      e.sort_order = i;
+      e.updated_at = new Date().toISOString();
+    });
+    NavSync.saveLocal({ searchEngines: searchEngines });
+    NavSync.requestSync();
+    renderSearchEngines();
+  }
+
+    var container = $('#searchEnginesContainer');
+    if (!container) return;
+    container.innerHTML = '';
+    
+    searchEngines.sort(function(a, b) { return a.sort_order - b.sort_order; });
+    
+    if (!currentEngine && searchEngines.length > 0) {
+      currentEngine = searchEngines[0];
+    }
+    
+    var addBtn = document.createElement('span');
+    addBtn.className = 'engine-tag add-engine-btn';
+    addBtn.innerHTML = '➕';
+    addBtn.title = '添加/编辑引擎';
+    addBtn.addEventListener('click', function() {
+       openEngineModal(null);
+    });
+    container.appendChild(addBtn);
+
+    searchEngines.forEach(function(engine) {
+      var tag = document.createElement('span');
+      tag.className = 'engine-tag';
+      if (currentEngine && currentEngine.id === engine.id) {
+        tag.classList.add('active');
+      }
+      tag.textContent = engine.name;
+      tag.setAttribute('data-id', engine.id);
+      tag.setAttribute('data-url', engine.url);
+      tag.draggable = true;
+      tag.addEventListener('dragstart', function(e) {
+        e.dataTransfer.effectAllowed = 'move';
+        draggedEngineId = engine.id;
+        tag.classList.add('dragging');
+      });
+      tag.addEventListener('dragend', function() {
+        draggedEngineId = null;
+        tag.classList.remove('dragging');
+      });
+      tag.addEventListener('dragover', function(e) {
+        if (draggedEngineId && draggedEngineId !== engine.id) {
+          e.preventDefault();
+        }
+      });
+      tag.addEventListener('drop', function(e) {
+        e.preventDefault();
+        if (!draggedEngineId || draggedEngineId === engine.id) return;
+        moveEngine(draggedEngineId, engine.id);
+      });
+
+      
+      tag.addEventListener('click', function () {
+        document.querySelectorAll('#searchEnginesContainer .engine-tag').forEach(function (t) { t.classList.remove('active'); });
+        tag.classList.add('active');
+        currentEngine = engine;
+        updateSearchSuggestions();
+      });
+      
+      container.appendChild(tag);
+      
+      tag.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        openEngineModal(engine);
+      });
+
+    });
+  }
+
   function renderAll() {
+    renderSearchEngines();
+
     var animate = !hasRenderedOnce;
     categoriesContainer.classList.toggle('categories-stable', !animate);
     categoriesContainer.innerHTML = '';
@@ -680,6 +780,84 @@
   }
 
   /* ====== Bookmark Modal ====== */
+
+  function openEngineModal(existingEngine) {
+    if (existingEngine) {
+      engineEditIdInput.value = existingEngine.id;
+      engineModalTitle.textContent = '编辑引擎';
+      engineNameInput.value = existingEngine.name;
+      engineUrlInput.value = existingEngine.url;
+      engineDeleteBtn.style.display = 'inline-block';
+    } else {
+      engineEditIdInput.value = '';
+      engineModalTitle.textContent = '添加引擎';
+      engineNameInput.value = '';
+      engineUrlInput.value = '';
+      engineDeleteBtn.style.display = 'none';
+    }
+    engineModal.classList.add('active');
+    engineNameInput.focus();
+  }
+
+  function closeEngineModal() {
+    engineModal.classList.remove('active');
+  }
+
+  function saveEngine() {
+    var id = engineEditIdInput.value;
+    var name = engineNameInput.value.trim();
+    var url = engineUrlInput.value.trim();
+
+    if (!name || !url) {
+      showToast('请填写名称和URL');
+      return;
+    }
+
+    if (!/^https?:\/\//.test(url)) {
+      url = 'https://' + url;
+    }
+
+    if (id) {
+      var idx = searchEngines.findIndex(function(e) { return e.id === id; });
+      if (idx >= 0) {
+        searchEngines[idx].name = name;
+        searchEngines[idx].url = url;
+        searchEngines[idx].updated_at = new Date().toISOString();
+      }
+      showToast('引擎已更新');
+    } else {
+      searchEngines.push({
+        id: 'se-' + Date.now(),
+        name: name,
+        url: url,
+        sort_order: searchEngines.length,
+        updated_at: new Date().toISOString()
+      });
+      showToast('引擎已添加');
+    }
+
+    closeEngineModal();
+    NavSync.saveLocal({ searchEngines: searchEngines });
+    NavSync.requestSync();
+    renderSearchEngines();
+  }
+
+  function deleteEngine() {
+    var id = engineEditIdInput.value;
+    if (!id) return;
+    
+    if (confirm('确定要删除该引擎吗？')) {
+      searchEngines = searchEngines.filter(function(e) { return e.id !== id; });
+      if (currentEngine && currentEngine.id === id) {
+        currentEngine = searchEngines.length > 0 ? searchEngines[0] : null;
+      }
+      showToast('引擎已删除');
+      closeEngineModal();
+      NavSync.saveLocal({ searchEngines: searchEngines });
+      NavSync.requestSync();
+      renderSearchEngines();
+    }
+  }
 
   function openBookmarkModal(categoryId, existingBm) {
     editingBookmarkId = existingBm ? existingBm.id : null;
@@ -1273,6 +1451,13 @@
   /* ====== Events ====== */
 
   function bindEvents() {
+    engineCancelBtn.addEventListener('click', closeEngineModal);
+    engineConfirmBtn.addEventListener('click', saveEngine);
+    engineDeleteBtn.addEventListener('click', deleteEngine);
+    engineModal.addEventListener('click', function(e) {
+      if (e.target === engineModal) closeEngineModal();
+    });
+
     // Search
     searchBtn.addEventListener('click', performSearch);
     searchInput.addEventListener('input', updateSearchSuggestions);
@@ -1293,9 +1478,6 @@
     });
 
     // Engine tabs
-    engineTags.forEach(function (tag) {
-      tag.addEventListener('click', function () {
-        engineTags.forEach(function (t) { t.classList.remove('active'); });
         tag.classList.add('active');
         currentEngine.url = tag.getAttribute('data-url');
         updateSearchSuggestions();

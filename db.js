@@ -335,12 +335,36 @@ var NavDB = (function () {
   async function fetchAll() {
     var cats = await fetchCategories();
     var bms = await fetchBookmarks();
-    return { categories: cats, bookmarks: bms };
+    var _ref3 = await sb.from('search_engines')
+      .select('*)
+      .eq('user_id', currentUser.id)
+      .order('sort_order', { ascending: true });
+    var engines = dataOrThrow(_ref3) || [];
+    return { categories: cats, bookmarks: bms, searchEngines: engines };
+
   }
 
-  async function pushAll(cats, bms) {
+  async function upsertSearchEngines(engines) {
+    if (!currentUser) return;
+    if (!engines || engines.length === 0) return;
+    var rows = engines.map(function(e, i) {
+      return {
+        id: e.id,
+        user_id: currentUser.id,
+        name: e.name,
+        url: e.url,
+        sort_order: i,
+        updated_at: e.updated_at || new Date().toISOString()
+      };
+    });
+    dataOrThrow(await sb.from('search_engines').upsert(rows, { onConflict: 'id' }));
+  }
+
+  async function pushAll(cats, bms, engines) {
     await upsertCategories(cats);
     await upsertBookmarks(bms);
+    await upsertSearchEngines(engines);
+
   }
 
   return {

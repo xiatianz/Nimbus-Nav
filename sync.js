@@ -2,6 +2,7 @@
 var NavSync = (function () {
   var LS_CATEGORIES = 'nav_categories';
   var LS_BOOKMARKS = 'nav_bookmarks';
+  var LS_SEARCH_ENGINES = 'nav_search_engines';
   var LS_SYNC_TIME = 'nav_last_sync';
   var LS_MERGED = 'nav_cloud_merged';
   var LS_DELETED_CATEGORIES = 'nav_deleted_categories';
@@ -12,12 +13,14 @@ var NavSync = (function () {
   function loadLocal() {
     var cats = JSON.parse(localStorage.getItem(LS_CATEGORIES) || '[]');
     var bms = JSON.parse(localStorage.getItem(LS_BOOKMARKS) || '[]');
-    return { categories: cats, bookmarks: bms };
+    var se = JSON.parse(localStorage.getItem(LS_SEARCH_ENGINES) || '[]');
+    return { categories: cats, bookmarks: bms, searchEngines: se };
   }
 
   function saveLocal(data) {
     localStorage.setItem(LS_CATEGORIES, JSON.stringify(data.categories));
     localStorage.setItem(LS_BOOKMARKS, JSON.stringify(data.bookmarks));
+    if (data.searchEngines) localStorage.setItem(LS_SEARCH_ENGINES, JSON.stringify(data.searchEngines));
   }
 
   function getLocalSyncTime() {
@@ -191,7 +194,7 @@ var NavSync = (function () {
       }
     });
 
-    return { categories: uniqueCats, bookmarks: uniqueBms };
+    return { categories: uniqueCats, bookmarks: uniqueBms, searchEngines: data.searchEngines || [] };
   }
 
   /* ---- 合并策略：时间戳对比，最后写入胜出 ---- */
@@ -199,6 +202,8 @@ var NavSync = (function () {
   function mergeData(localData, remoteData) {
     var mergedCats = [];
     var mergedBms = [];
+    var mergedEngines = [];
+
 
     // 建索引
     var localCatMap = {};
@@ -257,7 +262,27 @@ var NavSync = (function () {
     // 排序
     mergedCats.sort(function (a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
 
-    return { categories: mergedCats, bookmarks: mergedBms };
+    var localEngineMap = {};
+    (localData.searchEngines || []).forEach(function (e) { localEngineMap[e.id] = e; });
+    var remoteEngineMap = {};
+    (remoteData.searchEngines || []).forEach(function (e) { remoteEngineMap[e.id] = e; });
+    var allEngineIds = {};
+    (localData.searchEngines || []).forEach(function (e) { allEngineIds[e.id] = true; });
+    (remoteData.searchEngines || []).forEach(function (e) { allEngineIds[e.id] = true; });
+    Object.keys(allEngineIds).forEach(function (id) {
+      var local = localEngineMap[id];
+      var remote = remoteEngineMap[id];
+      if (local && remote) {
+        var lt = new Date(local.updated_at || 0).getTime();
+        var rt = new Date(remote.updated_at || 0).getTime();
+        mergedEngines.push(lt >= rt ? local : remote);
+      } else {
+        mergedEngines.push(local || remote);
+      }
+    });
+    mergedEngines.sort(function(a, b) { return a.sort_order - b.sort_order; });
+
+    return { categories: mergedCats, bookmarks: mergedBms, searchEngines: mergedEngines };
   }
 
   /* ---- 核心同步流程 ---- */
@@ -279,9 +304,9 @@ var NavSync = (function () {
     }
 
     // 远端无数据 → 把本地推上去
-    if (remoteData.categories.length === 0 && remoteData.bookmarks.length === 0) {
+    if (remoteData.categories.length === 0 && remoteData.bookmarks.length === 0 && (!remoteData.searchEngines || remoteData.searchEngines.length === 0)) {
       if (localData.categories.length > 0) {
-        await NavDB.pushAll(localData.categories, localData.bookmarks);
+        await NavDB.pushAll(localData.categories, localData.bookmarks, localData.searchEngines);
       }
       setMerged();
       setLocalSyncTime(new Date().toISOString());
@@ -289,7 +314,7 @@ var NavSync = (function () {
     }
 
     // 本地无数据 (或被识别为纯粹的未改动默认数据) → 拉远端
-    if (localData.categories.length === 0 && localData.bookmarks.length === 0) {
+    if (localData.categories.length === 0 && localData.bookmarks.length === 0 && (!localData.searchEngines || localData.searchEngines.length === 0)) {
       // 拉取远端时也做一次去重保护，清理历史遗留重复
       var dedupedRemote = deduplicate(remoteData);
       saveLocal(dedupedRemote);
@@ -301,7 +326,7 @@ var NavSync = (function () {
     // 两边都有 → 合并 & 终极去重
     var merged = deduplicate(mergeData(localData, remoteData));
     saveLocal(merged);
-    await NavDB.pushAll(merged.categories, merged.bookmarks);
+    await NavDB.pushAll(merged.categories, merged.bookmarks, merged.searchEngines);
     setMerged();
     setLocalSyncTime(new Date().toISOString());
     return merged;
