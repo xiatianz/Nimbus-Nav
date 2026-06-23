@@ -8,43 +8,9 @@ function testInitialUsesNameFirst() {
   }), 'F');
 }
 
-function testFaviconCandidatesTryCommonSiteIconPaths() {
-  const candidates = NavBookmarks.getFaviconCandidates('github.com/explore');
-
-  assert.deepStrictEqual(candidates.slice(0, 5), [
-    'https://github.com/favicon.ico',
-    'https://github.com/favicon.svg',
-    'https://github.com/favicon.png',
-    'https://github.com/apple-touch-icon.png',
-    'https://github.com/apple-touch-icon-precomposed.png'
-  ]);
-  assert(!candidates.some((url) => url.includes('google.com/s2/favicons')));
-}
-
-function testFaviconCandidatesIncludeKnownExternalIconHost() {
-  assert.strictEqual(
-    NavBookmarks.getFaviconCandidates('https://www.figma.com/files')[0],
-    'https://static.figma.com/app/icon/2/favicon.svg'
-  );
-}
-
-function testFaviconCandidatesIncludeKnownBrandIconFallback() {
-  assert(
-    NavBookmarks.getFaviconCandidates('https://www.npmjs.com/package/react')
-      .includes('https://cdn.simpleicons.org/npm/CB3837')
-  );
-}
-
-function testFaviconCandidatesIncludeUnavatarFallback() {
-
-function testFaviconCandidatesIncludeFaviconIm() {
-  const candidates = NavBookmarks.getFaviconCandidates('https://example.com/docs');
-  assert(candidates.includes('https://favicon.im/example.com'));
-}
-  const candidates = NavBookmarks.getFaviconCandidates('https://example.com/docs');
-
-  assert(candidates.includes('https://unavatar.io/example.com'));
-  assert(!candidates.some((url) => url.includes('google.com/s2/favicons')));
+function testFaviconUrlUsesFaviconIm() {
+  const url = NavBookmarks.getFaviconUrl('https://example.com/docs');
+  assert.strictEqual(url, 'https://favicon.im/example.com');
 }
 
 function testRecentBookmarksSortByLastVisit() {
@@ -67,16 +33,7 @@ function testRecentBookmarksSortByLastVisit() {
 
 function run() {
   testInitialUsesNameFirst();
-  testFaviconCandidatesTryCommonSiteIconPaths();
-  testFaviconCandidatesIncludeKnownExternalIconHost();
-  testFaviconCandidatesIncludeKnownBrandIconFallback();
-  testFaviconCandidatesIncludeUnavatarFallback();
-  testFaviconCandidatesIncludeFaviconIm();
-
-function testFaviconCandidatesIncludeFaviconIm() {
-  const candidates = NavBookmarks.getFaviconCandidates('https://example.com/docs');
-  assert(candidates.includes('https://favicon.im/example.com'));
-}
+  testFaviconUrlUsesFaviconIm();
   testRecentBookmarksSortByLastVisit();
   console.log('bookmark utils tests passed');
 }

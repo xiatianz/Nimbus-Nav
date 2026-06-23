@@ -372,30 +372,21 @@
     var img = document.createElement('img');
     img.alt = '';
     img.style.display = 'none';
-    var faviconCandidates = NavBookmarks.getFaviconCandidates(bm.url);
-    var faviconIndex = 0;
-    function showFallbackIcon() {
-      img.style.display = 'none';
-      fallback.style.display = '';
-    }
-    function loadNextFavicon() {
-      if (faviconIndex >= faviconCandidates.length) {
-        showFallbackIcon();
-        return;
-      }
-      img.src = faviconCandidates[faviconIndex];
-      faviconIndex += 1;
-    }
-    img.onload = function () {
+    var favUrl = NavBookmarks.getFaviconUrl(bm.url);
+    if (favUrl) {
+      img.src = favUrl;
+      img.style.display = '';
       fallback.style.display = 'none';
-      img.style.display = 'block';
-    };
-    img.onerror = function () {
-      loadNextFavicon();
-    };
-    loadNextFavicon();
+      img.onerror = function () {
+        img.style.display = 'none';
+        fallback.style.display = '';
+      };
+    } else {
+      img.style.display = 'none';
+    }
     iconWrap.appendChild(fallback);
     iconWrap.appendChild(img);
+
 
     // Title
     var titleEl = document.createElement('div');

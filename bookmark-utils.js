@@ -29,65 +29,14 @@
     return value;
   }
 
-  var COMMON_FAVICON_PATHS = [
-    '/favicon.ico',
-    '/favicon.svg',
-    '/favicon.png',
-    '/apple-touch-icon.png',
-    '/apple-touch-icon-precomposed.png',
-    '/front-static/favicon.ico',
-    '/front-static/logo-ios.png',
-    '/images/favicon.ico',
-    '/assets/favicon.ico',
-    '/static/favicon.ico'
-  ];
-
-  var KNOWN_FAVICON_CANDIDATES = {
-    'figma.com': [
-      'https://static.figma.com/app/icon/2/favicon.svg',
-      'https://static.figma.com/app/icon/2/favicon.png',
-      'https://static.figma.com/app/icon/2/favicon.ico',
-      'https://cdn.simpleicons.org/figma/F24E1E'
-    ],
-    'notion.so': ['https://cdn.simpleicons.org/notion/000000'],
-    'notion.com': ['https://cdn.simpleicons.org/notion/000000'],
-    'npmjs.com': ['https://cdn.simpleicons.org/npm/CB3837'],
-    'youtube.com': ['https://cdn.simpleicons.org/youtube/FF0000'],
-    'x.com': ['https://cdn.simpleicons.org/x/000000'],
-    'twitter.com': ['https://cdn.simpleicons.org/x/000000']
-  };
-
-  function getKnownFaviconCandidates(hostname) {
-    var host = String(hostname || '').replace(/^www\./, '');
-    var candidates = [];
-    Object.keys(KNOWN_FAVICON_CANDIDATES).forEach(function (domain) {
-      if (host === domain || host.slice(-(domain.length + 1)) === '.' + domain) {
-        candidates = candidates.concat(KNOWN_FAVICON_CANDIDATES[domain]);
-      }
-    });
-    return candidates;
-  }
-
-  function getFaviconCandidates(url) {
+  function getFaviconUrl(url) {
     try {
       var value = normalizeBookmarkUrl(url);
       var parsed = new URL(value);
-      if (!/^https?:$/.test(parsed.protocol)) return [];
-
-      var seen = {};
-      var candidates = getKnownFaviconCandidates(parsed.hostname);
-      COMMON_FAVICON_PATHS.forEach(function (path) {
-        candidates.push(parsed.origin + path);
-      });
-      candidates.push('https://favicon.im/' + parsed.hostname.replace(/^www./, ''));
-      candidates.push('https://unavatar.io/' + parsed.hostname.replace(/^www\./, ''));
-      return candidates.filter(function (candidate) {
-        if (seen[candidate]) return false;
-        seen[candidate] = true;
-        return true;
-      });
+      if (!/^https?:$/.test(parsed.protocol)) return '';
+      return 'https://favicon.im/' + parsed.hostname.replace(/^www\./, '');
     } catch (e) {
-      return [];
+      return '';
     }
   }
 
@@ -118,7 +67,7 @@
 
   return {
     getDomain: getDomain,
-    getFaviconCandidates: getFaviconCandidates,
+    getFaviconUrl: getFaviconUrl,
     getBookmarkInitial: getBookmarkInitial,
     getTopVisitedBookmarks: getTopVisitedBookmarks
   };
