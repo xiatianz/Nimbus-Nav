@@ -8,12 +8,30 @@ function testInitialUsesNameFirst() {
   }), 'F');
 }
 
-function testFaviconCandidatesUseOnlySiteFavicon() {
-  assert.deepStrictEqual(
-    NavBookmarks.getFaviconCandidates('github.com/explore'),
-    [
-      'https://github.com/favicon.ico'
-    ]
+function testFaviconCandidatesTryCommonSiteIconPaths() {
+  const candidates = NavBookmarks.getFaviconCandidates('github.com/explore');
+
+  assert.deepStrictEqual(candidates.slice(0, 5), [
+    'https://github.com/favicon.ico',
+    'https://github.com/favicon.svg',
+    'https://github.com/favicon.png',
+    'https://github.com/apple-touch-icon.png',
+    'https://github.com/apple-touch-icon-precomposed.png'
+  ]);
+  assert(!candidates.some((url) => url.includes('google.com/s2/favicons')));
+}
+
+function testFaviconCandidatesIncludeKnownExternalIconHost() {
+  assert.strictEqual(
+    NavBookmarks.getFaviconCandidates('https://www.figma.com/files')[0],
+    'https://static.figma.com/app/icon/2/favicon.svg'
+  );
+}
+
+function testFaviconCandidatesIncludeKnownBrandIconFallback() {
+  assert(
+    NavBookmarks.getFaviconCandidates('https://www.npmjs.com/package/react')
+      .includes('https://cdn.simpleicons.org/npm/CB3837')
   );
 }
 
@@ -37,7 +55,9 @@ function testRecentBookmarksSortByLastVisit() {
 
 function run() {
   testInitialUsesNameFirst();
-  testFaviconCandidatesUseOnlySiteFavicon();
+  testFaviconCandidatesTryCommonSiteIconPaths();
+  testFaviconCandidatesIncludeKnownExternalIconHost();
+  testFaviconCandidatesIncludeKnownBrandIconFallback();
   testRecentBookmarksSortByLastVisit();
   console.log('bookmark utils tests passed');
 }
