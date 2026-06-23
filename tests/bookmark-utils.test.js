@@ -35,6 +35,13 @@ function testFaviconCandidatesIncludeKnownBrandIconFallback() {
   );
 }
 
+function testFaviconCandidatesIncludeUnavatarFallback() {
+  const candidates = NavBookmarks.getFaviconCandidates('https://example.com/docs');
+
+  assert(candidates.includes('https://unavatar.io/example.com'));
+  assert(!candidates.some((url) => url.includes('google.com/s2/favicons')));
+}
+
 function testRecentBookmarksSortByLastVisit() {
   const bookmarks = [
     { id: 'a', name: 'Alpha', url: 'https://a.com' },
@@ -58,6 +65,7 @@ function run() {
   testFaviconCandidatesTryCommonSiteIconPaths();
   testFaviconCandidatesIncludeKnownExternalIconHost();
   testFaviconCandidatesIncludeKnownBrandIconFallback();
+  testFaviconCandidatesIncludeUnavatarFallback();
   testRecentBookmarksSortByLastVisit();
   console.log('bookmark utils tests passed');
 }
