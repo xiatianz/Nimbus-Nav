@@ -34,6 +34,8 @@
   var userMenu, userAvatar, userAvatarBtn, userName, syncDot;
   var userDropdown, logoutBtn;
   var bookmarkModal, categoryModal;
+  var engineModal, engineModalTitle, engineNameInput, engineUrlInput;
+  var engineDeleteBtn, engineCancelBtn, engineConfirmBtn, engineEditIdInput;
   var confirmModal, confirmMessage, confirmOkBtn, confirmCancelBtn;
   var passkeyModal, passkeyListEl;
   var toastContainer;
@@ -248,7 +250,8 @@
       currentEngine = searchEngines[0];
     }
     
-    var addBtn = document.createElement('span');
+    var addBtn = document.createElement('button');
+    addBtn.type = 'button';
     addBtn.className = 'engine-tag add-engine-btn';
     addBtn.innerHTML = '➕';
     addBtn.title = '添加/编辑引擎';
@@ -258,7 +261,8 @@
     container.appendChild(addBtn);
 
     searchEngines.forEach(function(engine) {
-      var tag = document.createElement('span');
+      var tag = document.createElement('button');
+      tag.type = 'button';
       tag.className = 'engine-tag';
       if (currentEngine && currentEngine.id === engine.id) {
         tag.classList.add('active');
@@ -572,12 +576,12 @@
       return;
     }
 
-    openSearchSuggestion(NavSearch.getDirectAction(query, currentEngine.url));
+    openSearchSuggestion(NavSearch.getDirectAction(query, currentEngine ? currentEngine.url : ''));
   }
 
   function updateSearchSuggestions() {
     var query = searchInput.value.trim();
-    searchSuggestions = NavSearch.buildSuggestions(query, bookmarks, currentEngine.url);
+    searchSuggestions = NavSearch.buildSuggestions(query, bookmarks, currentEngine ? currentEngine.url : '');
     selectedSuggestionIndex = searchSuggestions.length > 0 ? 0 : -1;
     applyCardSearchState(query);
     renderSearchSuggestions();
@@ -1475,13 +1479,6 @@
         e.preventDefault();
         performSearch();
       }
-    });
-
-    // Engine tabs
-        tag.classList.add('active');
-        currentEngine.url = tag.getAttribute('data-url');
-        updateSearchSuggestions();
-      });
     });
 
     openModeBtn.addEventListener('click', function () {

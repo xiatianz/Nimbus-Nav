@@ -10,17 +10,35 @@ var NavSync = (function () {
 
   /* ---- 本地存储 ---- */
 
+  function parseStoredArray(key) {
+    try {
+      var value = localStorage.getItem(key);
+      if (!value) return [];
+      var parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      localStorage.removeItem(key);
+      return [];
+    }
+  }
+
   function loadLocal() {
-    var cats = JSON.parse(localStorage.getItem(LS_CATEGORIES) || '[]');
-    var bms = JSON.parse(localStorage.getItem(LS_BOOKMARKS) || '[]');
-    var se = JSON.parse(localStorage.getItem(LS_SEARCH_ENGINES) || '[]');
+    var cats = parseStoredArray(LS_CATEGORIES);
+    var bms = parseStoredArray(LS_BOOKMARKS);
+    var se = parseStoredArray(LS_SEARCH_ENGINES);
     return { categories: cats, bookmarks: bms, searchEngines: se };
   }
 
   function saveLocal(data) {
-    localStorage.setItem(LS_CATEGORIES, JSON.stringify(data.categories));
-    localStorage.setItem(LS_BOOKMARKS, JSON.stringify(data.bookmarks));
-    if (data.searchEngines) localStorage.setItem(LS_SEARCH_ENGINES, JSON.stringify(data.searchEngines));
+    var current = loadLocal();
+    var next = {
+      categories: Array.isArray(data.categories) ? data.categories : current.categories,
+      bookmarks: Array.isArray(data.bookmarks) ? data.bookmarks : current.bookmarks,
+      searchEngines: Array.isArray(data.searchEngines) ? data.searchEngines : current.searchEngines
+    };
+    localStorage.setItem(LS_CATEGORIES, JSON.stringify(next.categories));
+    localStorage.setItem(LS_BOOKMARKS, JSON.stringify(next.bookmarks));
+    localStorage.setItem(LS_SEARCH_ENGINES, JSON.stringify(next.searchEngines));
   }
 
   function getLocalSyncTime() {
@@ -121,6 +139,12 @@ var NavSync = (function () {
 
   function initDefaultData() {
     var existing = loadLocal();
+    if (existing.searchEngines.length === 0 && typeof DEFAULT_SEARCH_ENGINES !== 'undefined') {
+      existing.searchEngines = DEFAULT_SEARCH_ENGINES.map(function (engine) {
+        return Object.assign({}, engine);
+      });
+      saveLocal(existing);
+    }
     if (existing.categories.length > 0) return existing;
 
     var cats = [];
@@ -449,6 +473,14 @@ var NavSync = (function () {
     localStorage.removeItem(LS_SYNC_TIME);
   }
 
+  async function requestSync() {
+    if (!NavDB.isLoggedIn()) return loadLocal();
+    var data = loadLocal();
+    await NavDB.pushAll(data.categories, data.bookmarks, data.searchEngines);
+    setLocalSyncTime(new Date().toISOString());
+    return data;
+  }
+
   return {
     loadLocal: loadLocal,
     saveLocal: saveLocal,
@@ -461,6 +493,7 @@ var NavSync = (function () {
     updateBookmarkLocal: updateBookmarkLocal,
     deleteBookmarkLocal: deleteBookmarkLocal,
     resetMergeState: resetMergeState,
+    requestSync: requestSync,
     uuid: uuid
   };
 })();

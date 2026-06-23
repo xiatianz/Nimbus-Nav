@@ -74,8 +74,52 @@ async function testDeletedBookmarkDoesNotResurrectOnSync() {
   assert.strictEqual(NavSync.loadLocal().bookmarks.length, 0);
 }
 
+function testSavingOnlySearchEnginesKeepsExistingBookmarks() {
+  const { NavSync } = loadNavSync({
+    isLoggedIn: () => false
+  });
+  const original = {
+    categories: [{ id: 'cat-1', name: '工具', sort_order: 0 }],
+    bookmarks: [{ id: 'bm-1', category_id: 'cat-1', name: 'GitHub', url: 'https://github.com' }],
+    searchEngines: [{ id: 'se-1', name: 'Google', url: 'https://www.google.com/search?q=%s', sort_order: 0 }]
+  };
+
+  NavSync.saveLocal(original);
+  NavSync.saveLocal({
+    searchEngines: [{ id: 'se-2', name: 'Bing', url: 'https://www.bing.com/search?q=%s', sort_order: 0 }]
+  });
+
+  const saved = NavSync.loadLocal();
+  assert.deepEqual(saved.categories, original.categories);
+  assert.deepEqual(saved.bookmarks, original.bookmarks);
+  assert.strictEqual(saved.searchEngines.length, 1);
+  assert.strictEqual(saved.searchEngines[0].id, 'se-2');
+}
+
+async function testRequestSyncPushesCurrentLocalData() {
+  let pushed = null;
+  const { NavSync } = loadNavSync({
+    isLoggedIn: () => true,
+    pushAll: async (categories, bookmarks, searchEngines) => {
+      pushed = { categories, bookmarks, searchEngines };
+    }
+  });
+  const localData = {
+    categories: [{ id: 'cat-1', name: '工具', sort_order: 0 }],
+    bookmarks: [{ id: 'bm-1', category_id: 'cat-1', name: 'GitHub', url: 'https://github.com' }],
+    searchEngines: [{ id: 'se-1', name: 'Google', url: 'https://www.google.com/search?q=%s', sort_order: 0 }]
+  };
+
+  NavSync.saveLocal(localData);
+  await NavSync.requestSync();
+
+  assert.deepEqual(pushed, localData);
+}
+
 async function run() {
   await testDeletedBookmarkDoesNotResurrectOnSync();
+  testSavingOnlySearchEnginesKeepsExistingBookmarks();
+  await testRequestSyncPushesCurrentLocalData();
   console.log('sync regression tests passed');
 }
 

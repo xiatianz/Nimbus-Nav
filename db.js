@@ -335,6 +335,7 @@ var NavDB = (function () {
   async function fetchAll() {
     var cats = await fetchCategories();
     var bms = await fetchBookmarks();
+    var sb = getClient();
     var _ref3 = await sb.from('search_engines')
       .select('*')
       .eq('user_id', currentUser.id)
@@ -347,6 +348,7 @@ var NavDB = (function () {
   async function upsertSearchEngines(engines) {
     if (!currentUser) return;
     if (!engines || engines.length === 0) return;
+    var sb = getClient();
     var rows = engines.map(function(e, i) {
       return {
         id: e.id,
@@ -400,6 +402,7 @@ var NavDB = (function () {
     updateBookmark: updateBookmark,
     deleteBookmark: deleteBookmark,
     fetchAll: fetchAll,
+    upsertSearchEngines: upsertSearchEngines,
     pushAll: pushAll
   };
 })();
