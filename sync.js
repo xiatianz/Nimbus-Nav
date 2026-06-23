@@ -149,7 +149,7 @@ var NavSync = (function () {
       });
     });
 
-    var data = { categories: cats, bookmarks: bms };
+    var data = { categories: cats, bookmarks: bms, searchEngines: DEFAULT_SEARCH_ENGINES };
     saveLocal(data);
     return data;
   }

@@ -336,7 +336,7 @@ var NavDB = (function () {
     var cats = await fetchCategories();
     var bms = await fetchBookmarks();
     var _ref3 = await sb.from('search_engines')
-      .select('*)
+      .select('*')
       .eq('user_id', currentUser.id)
       .order('sort_order', { ascending: true });
     var engines = dataOrThrow(_ref3) || [];
