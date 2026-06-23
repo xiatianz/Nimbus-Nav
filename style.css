@@ -1424,64 +1424,105 @@ body {
 
 /* ====== Responsive ====== */
 @media (max-width: 768px) {
-  .container { padding: 24px 12px 48px; }
+  .container { padding: 16px 14px 32px; }
 
+  /* -- Header: horizontal on mobile, compact -- */
   .header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
   }
+  .subtitle { display: none; }
+  .logo { font-size: 1.15rem; gap: 7px; }
+  .logo-icon { width: 26px; height: 26px; }
+  .header-right { padding-top: 0; }
 
-  .header-right {
-    align-self: flex-start;
+  /* -- Search -- */
+  .search-wrapper {
+    width: 100%;
+    margin-bottom: 20px;
   }
+  .search-box { padding: 10px 12px; border-radius: 10px; }
+  .search-input { font-size: 0.88rem; }
+  .search-suggestions { top: 52px; padding: 6px; }
+  .search-suggestion { min-height: 44px; padding: 8px; gap: 8px; }
+  .search-suggestion-icon { width: 28px; height: 28px; font-size: 0.78rem; }
+  .search-suggestion-title { font-size: 0.8rem; }
+  .search-suggestion-subtitle { font-size: 0.68rem; }
+  .search-btn { padding: 7px 14px; font-size: 0.78rem; }
+  .search-engines { margin-top: 10px; gap: 2px; }
+  .engine-tag { padding: 5px 10px; font-size: 0.72rem; }
 
-  .logo { font-size: 1.35rem; }
-  .logo-icon { width: 28px; height: 28px; }
-
+  /* -- Cards: 3-column grid, tighter -- */
   .card-grid {
-    grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: 8px;
   }
 
   .card {
-    padding: 14px 8px 12px;
-    border-radius: var(--radius-sm);
+    padding: 12px 6px 10px;
+    border-radius: 8px;
+    min-height: 96px;
+    gap: 4px;
   }
 
-  .card-icon {
-    width: 34px;
-    height: 34px;
-  }
+  .card-icon { width: 32px; height: 32px; }
+  .card-icon img { width: 20px; height: 20px; }
+  .card-icon-fallback { font-size: 1rem; }
 
-  .search-wrapper {
-    width: 100%;
-    margin-bottom: 32px;
-  }
-  .search-box { padding: 12px 14px; }
-  .search-suggestions { top: 56px; }
-  .search-btn { padding: 8px 16px; }
-  .category { margin-bottom: 28px; }
-  .category-actions { opacity: 1; }
+  .card-title { font-size: 0.72rem; }
+  .card-desc { font-size: 0.62rem; min-height: 0; }
+
+  /* -- Hide edit/delete buttons on mobile; use long-press instead -- */
   .card .card-actions {
-    display: flex;
-    opacity: 1;
-    transform: none;
+    display: none;
   }
+  .category-actions { opacity: 0; pointer-events: none; }
 
+  /* -- Category -- */
+  .category { margin-bottom: 22px; }
+  .category-header { margin-bottom: 10px; }
+  .category-title { font-size: 0.85rem; }
+
+  /* -- Footer -- */
+  .footer { padding-bottom: 24px; }
+  .footer-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .footer-features { gap: 8px; }
+  .footer-feature { font-size: 0.68rem; }
+
+  /* -- Modals full-width on mobile -- */
+  .modal { width: 95%; padding: 20px 16px; }
+  .auth-modal { max-width: none; }
+
+  /* -- Dropdown -- */
   .user-dropdown {
     right: auto;
     left: 0;
   }
 
-  .footer-top {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
+  /* -- Add card -- */
+  .card-add { min-height: 96px; }
+  .category-empty { min-height: 96px; }
+  .add-category-btn { font-size: 0.75rem; padding: 7px 14px; }
+}
+
+/* Small phones */
+@media (max-width: 374px) {
+  .card-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
   }
-  .footer-features {
-    gap: 10px;
-  }
+  .card { padding: 10px 4px 8px; min-height: 88px; }
+  .card-icon { width: 28px; height: 28px; }
+  .card-icon img { width: 18px; height: 18px; }
+  .card-title { font-size: 0.68rem; }
+  .card-desc { display: none; }
+  .logo { font-size: 1.05rem; }
 }
 
 /* ====== Dark Mode ====== */

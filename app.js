@@ -371,6 +371,11 @@
       e.preventDefault();
       moveCategory(draggedCategoryId, cat.id);
     });
+    // Long-press / right-click opens category edit on mobile
+    header.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      openCategoryModal(cat);
+    });
 
     var title = document.createElement('h2');
     title.className = 'category-title';
@@ -466,6 +471,12 @@
         e.preventDefault();
         e.stopPropagation();
         moveBookmark(draggedBookmarkId, bm.id, bm.category_id);
+      });
+      // Long-press / right-click opens edit modal on mobile
+      a.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openBookmarkModal(null, bm);
       });
     }
 
@@ -622,8 +633,11 @@
       item.appendChild(icon);
       item.appendChild(copy);
       item.addEventListener('mouseenter', function () {
+        var prev = searchSuggestionsEl.querySelector('.search-suggestion.active');
+        if (prev) { prev.classList.remove('active'); prev.setAttribute('aria-selected', 'false'); }
         selectedSuggestionIndex = index;
-        renderSearchSuggestions();
+        item.classList.add('active');
+        item.setAttribute('aria-selected', 'true');
       });
       item.addEventListener('mousedown', function (e) {
         e.preventDefault();
@@ -677,13 +691,14 @@
       });
       return;
     }
+    var words = value.split(/\s+/).filter(function (w) { return w.length > 0; });
     cards.forEach(function (card) {
       var haystack = [
         card.dataset.name,
         card.dataset.domain,
         card.dataset.description
       ].join(' ').toLowerCase();
-      var match = haystack.indexOf(value) >= 0;
+      var match = words.length > 0 && words.every(function (w) { return haystack.indexOf(w) >= 0; });
       card.classList.toggle('card-search-match', match);
       card.classList.toggle('card-search-dim', !match);
     });
