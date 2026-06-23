@@ -17,8 +17,8 @@ var DEFAULT_DATA = [
   }
 ];
 var DEFAULT_SEARCH_ENGINES = [
-  { id: 'def-se-1', name: '百度', url: 'https://www.baidu.com/s?wd=', sort_order: 0 },
-  { id: 'def-se-2', name: 'Google', url: 'https://www.google.com/search?q=', sort_order: 1 },
-  { id: 'def-se-3', name: 'Bing', url: 'https://www.bing.com/search?q=', sort_order: 2 },
-  { id: 'def-se-4', name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=', sort_order: 3 }
+  { id: '00000000-0000-4000-8000-000000000001', name: '百度', url: 'https://www.baidu.com/s?wd=', sort_order: 0 },
+  { id: '00000000-0000-4000-8000-000000000002', name: 'Google', url: 'https://www.google.com/search?q=', sort_order: 1 },
+  { id: '00000000-0000-4000-8000-000000000003', name: 'Bing', url: 'https://www.bing.com/search?q=', sort_order: 2 },
+  { id: '00000000-0000-4000-8000-000000000004', name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=', sort_order: 3 }
 ];

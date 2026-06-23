@@ -135,6 +135,9 @@ var NavSync = (function () {
     });
   }
 
+  var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  function isUUID(s) { return UUID_RE.test(s); }
+
   /* ---- 初始化默认数据 ---- */
 
   function initDefaultData() {
@@ -145,6 +148,15 @@ var NavSync = (function () {
       });
       saveLocal(existing);
     }
+    // Migrate non-UUID search engine IDs to real UUIDs for Supabase compat
+    var migrated = false;
+    existing.searchEngines.forEach(function (engine) {
+      if (!isUUID(engine.id)) {
+        engine.id = uuid();
+        migrated = true;
+      }
+    });
+    if (migrated) saveLocal(existing);
     if (existing.categories.length > 0) return existing;
 
     var cats = [];
@@ -476,8 +488,12 @@ var NavSync = (function () {
   async function requestSync() {
     if (!NavDB.isLoggedIn()) return loadLocal();
     var data = loadLocal();
-    await NavDB.pushAll(data.categories, data.bookmarks, data.searchEngines);
-    setLocalSyncTime(new Date().toISOString());
+    try {
+      await NavDB.pushAll(data.categories, data.bookmarks, data.searchEngines);
+      setLocalSyncTime(new Date().toISOString());
+    } catch (e) {
+      console.warn('requestSync push failed:', e.message);
+    }
     return data;
   }
 

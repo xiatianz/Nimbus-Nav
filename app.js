@@ -202,7 +202,7 @@
       var data = await NavSync.syncOnLogin();
       categories = data.categories;
       bookmarks = data.bookmarks;
-      searchEngines = data.searchEngines || [];
+      searchEngines = data.searchEngines || searchEngines || [];
       renderSearchEngines();
       renderAll();
       syncDot.className = 'sync-dot';
@@ -210,6 +210,8 @@
       console.error('同步失败:', e);
       syncDot.className = 'sync-dot error';
       showToast('同步失败，请检查网络', 'error');
+      renderSearchEngines();
+      renderAll();
     }
   }
 
@@ -250,16 +252,6 @@
       currentEngine = searchEngines[0];
     }
     
-    var addBtn = document.createElement('button');
-    addBtn.type = 'button';
-    addBtn.className = 'engine-tag add-engine-btn';
-    addBtn.innerHTML = '➕';
-    addBtn.title = '添加/编辑引擎';
-    addBtn.addEventListener('click', function() {
-       openEngineModal(null);
-    });
-    container.appendChild(addBtn);
-
     searchEngines.forEach(function(engine) {
       var tag = document.createElement('button');
       tag.type = 'button';
@@ -307,6 +299,16 @@
       });
 
     });
+
+    var addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'engine-tag add-engine-btn';
+    addBtn.innerHTML = '➕';
+    addBtn.title = '添加/编辑引擎';
+    addBtn.addEventListener('click', function() {
+       openEngineModal(null);
+    });
+    container.appendChild(addBtn);
   }
 
   function renderAll() {
@@ -831,7 +833,7 @@
       showToast('引擎已更新');
     } else {
       searchEngines.push({
-        id: 'se-' + Date.now(),
+        id: NavSync.uuid(),
         name: name,
         url: url,
         sort_order: searchEngines.length,
