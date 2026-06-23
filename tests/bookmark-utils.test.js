@@ -8,12 +8,11 @@ function testInitialUsesNameFirst() {
   }), 'F');
 }
 
-function testFaviconCandidatesPreferSiteFavicon() {
+function testFaviconCandidatesUseOnlySiteFavicon() {
   assert.deepStrictEqual(
     NavBookmarks.getFaviconCandidates('github.com/explore'),
     [
-      'https://github.com/favicon.ico',
-      'https://www.google.com/s2/favicons?domain=github.com&sz=32&default=404'
+      'https://github.com/favicon.ico'
     ]
   );
 }
@@ -38,7 +37,7 @@ function testRecentBookmarksSortByLastVisit() {
 
 function run() {
   testInitialUsesNameFirst();
-  testFaviconCandidatesPreferSiteFavicon();
+  testFaviconCandidatesUseOnlySiteFavicon();
   testRecentBookmarksSortByLastVisit();
   console.log('bookmark utils tests passed');
 }

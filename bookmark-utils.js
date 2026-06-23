@@ -35,10 +35,8 @@
       var parsed = new URL(value);
       if (!/^https?:$/.test(parsed.protocol)) return [];
 
-      var domain = parsed.hostname.replace(/^www\./, '');
       return [
-        parsed.origin + '/favicon.ico',
-        'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=32&default=404'
+        parsed.origin + '/favicon.ico'
       ];
     } catch (e) {
       return [];
