@@ -116,10 +116,43 @@ async function testRequestSyncPushesCurrentLocalData() {
   assert.deepEqual(pushed, localData);
 }
 
+async function testDefaultLocalDataIsKeptWhenRemoteIsEmpty() {
+  let pushed = null;
+  const { NavSync } = loadNavSync({
+    isLoggedIn: () => true,
+    fetchAll: async () => ({ categories: [], bookmarks: [], searchEngines: [] }),
+    pushAll: async (categories, bookmarks, searchEngines) => {
+      pushed = { categories, bookmarks, searchEngines };
+    },
+    deleteBookmark: async () => {},
+    deleteCategory: async () => {}
+  });
+  const defaultLocalData = {
+    categories: [{ id: 'def-cat-1', name: '常用工具', sort_order: 0, updated_at: null }],
+    bookmarks: [{
+      id: 'def-bm-1-1',
+      category_id: 'def-cat-1',
+      name: 'GitHub',
+      url: 'https://github.com',
+      sort_order: 0,
+      updated_at: null
+    }],
+    searchEngines: [{ id: 'se-1', name: 'Google', url: 'https://www.google.com/search?q=', sort_order: 0 }]
+  };
+
+  NavSync.saveLocal(defaultLocalData);
+  const synced = await NavSync.syncOnLogin();
+
+  assert.strictEqual(synced.categories.length, 1);
+  assert.strictEqual(synced.bookmarks.length, 1);
+  assert.deepEqual(pushed, defaultLocalData);
+}
+
 async function run() {
   await testDeletedBookmarkDoesNotResurrectOnSync();
   testSavingOnlySearchEnginesKeepsExistingBookmarks();
   await testRequestSyncPushesCurrentLocalData();
+  await testDefaultLocalDataIsKeptWhenRemoteIsEmpty();
   console.log('sync regression tests passed');
 }
 

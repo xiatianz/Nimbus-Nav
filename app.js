@@ -50,11 +50,13 @@
     cacheDom();
     bindEvents();
     faviconCache = loadFaviconCache();
-    faviconLoader = NavBookmarks.createFaviconLoader({
-      maxConcurrent: 6,
-      timeoutMs: 2500,
-      schedule: scheduleFaviconLoad
-    });
+    faviconLoader = NavBookmarks.createFaviconLoader
+      ? NavBookmarks.createFaviconLoader({
+        maxConcurrent: 6,
+        timeoutMs: 2500,
+        schedule: scheduleFaviconLoad
+      })
+      : null;
 
     // 加载本地数据并立即渲染（避免空白闪烁）
     NavSync.initDefaultData();

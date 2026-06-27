@@ -335,7 +335,11 @@ var NavSync = (function () {
       return c.id.startsWith('def-cat-') && !c.updated_at;
     });
 
-    if (isLocalDefaultOnly) {
+    var remoteHasData = remoteData.categories.length > 0
+      || remoteData.bookmarks.length > 0
+      || (remoteData.searchEngines && remoteData.searchEngines.length > 0);
+
+    if (isLocalDefaultOnly && remoteHasData) {
       localData = { categories: [], bookmarks: [] };
     }
 
