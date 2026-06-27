@@ -24,9 +24,9 @@
 
   var LS_VISIT_STATS = 'nav_visit_stats';
   var LS_OPEN_MODE = 'nav_open_mode';
-  var LS_FAVICON_CACHE = 'nav_favicon_cache';
+  var LS_FAVICON_CACHE = 'nav_favicon_cache_v2';
   var FAVICON_SUCCESS_TTL = 7 * 24 * 60 * 60 * 1000;
-  var FAVICON_FAILURE_TTL = 24 * 60 * 60 * 1000;
+  var FAVICON_FAILURE_TTL = 0;
 
   /* ====== DOM refs ====== */
   var $ = function (sel) { return document.querySelector(sel); };
@@ -53,7 +53,7 @@
     faviconLoader = NavBookmarks.createFaviconLoader
       ? NavBookmarks.createFaviconLoader({
         maxConcurrent: 6,
-        timeoutMs: 2500,
+        timeoutMs: 10000,
         schedule: scheduleFaviconLoad
       })
       : null;
@@ -232,8 +232,13 @@
   }
 
   function rememberFaviconResult(url, ok) {
+    if (!ok) {
+      delete faviconCache[url];
+      saveFaviconCache();
+      return;
+    }
     faviconCache[url] = {
-      ok: !!ok,
+      ok: true,
       savedAt: Date.now()
     };
     saveFaviconCache();
@@ -563,7 +568,6 @@
     img.style.display = 'none';
     var favUrl = NavBookmarks.getFaviconUrl(bm.url);
     if (favUrl) {
-      img.loading = 'lazy';
       img.decoding = 'async';
       img.referrerPolicy = 'no-referrer';
       var cachedFavicon = getFaviconCacheEntry(favUrl);
