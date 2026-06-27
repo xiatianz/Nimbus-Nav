@@ -19,9 +19,14 @@
   var draggedEngineId = null;
 
   var draggedCategoryId = null;
+  var faviconLoader = null;
+  var faviconCache = {};
 
   var LS_VISIT_STATS = 'nav_visit_stats';
   var LS_OPEN_MODE = 'nav_open_mode';
+  var LS_FAVICON_CACHE = 'nav_favicon_cache';
+  var FAVICON_SUCCESS_TTL = 7 * 24 * 60 * 60 * 1000;
+  var FAVICON_FAILURE_TTL = 24 * 60 * 60 * 1000;
 
   /* ====== DOM refs ====== */
   var $ = function (sel) { return document.querySelector(sel); };
@@ -44,6 +49,12 @@
   async function init() {
     cacheDom();
     bindEvents();
+    faviconCache = loadFaviconCache();
+    faviconLoader = NavBookmarks.createFaviconLoader({
+      maxConcurrent: 6,
+      timeoutMs: 2500,
+      schedule: scheduleFaviconLoad
+    });
 
     // 加载本地数据并立即渲染（避免空白闪烁）
     NavSync.initDefaultData();
@@ -165,6 +176,65 @@
     passkeyModal = $('#passkeyModal');
     passkeyListEl = $('#passkeyList');
     toastContainer = $('#toastContainer');
+  }
+
+  function scheduleFaviconLoad(callback) {
+    var hasRun = false;
+    function runIdle() {
+      if (hasRun) return;
+      hasRun = true;
+      if (window.requestIdleCallback) {
+        window.requestIdleCallback(callback, { timeout: 1000 });
+      } else {
+        setTimeout(callback, 0);
+      }
+    }
+
+    if (document.readyState === 'complete') {
+      runIdle();
+    } else {
+      window.addEventListener('load', runIdle, { once: true });
+      setTimeout(function () {
+        if (document.readyState === 'complete') runIdle();
+      }, 0);
+    }
+  }
+
+  function loadFaviconCache() {
+    try {
+      return JSON.parse(localStorage.getItem(LS_FAVICON_CACHE) || '{}') || {};
+    } catch (e) {
+      localStorage.removeItem(LS_FAVICON_CACHE);
+      return {};
+    }
+  }
+
+  function saveFaviconCache() {
+    try {
+      localStorage.setItem(LS_FAVICON_CACHE, JSON.stringify(faviconCache));
+    } catch (e) {
+      // Ignore quota errors; favicon loading can still fall back to initials.
+    }
+  }
+
+  function getFaviconCacheEntry(url) {
+    var entry = faviconCache[url];
+    if (!entry || !entry.savedAt) return null;
+    var ttl = entry.ok ? FAVICON_SUCCESS_TTL : FAVICON_FAILURE_TTL;
+    if (Date.now() - entry.savedAt > ttl) {
+      delete faviconCache[url];
+      saveFaviconCache();
+      return null;
+    }
+    return entry;
+  }
+
+  function rememberFaviconResult(url, ok) {
+    faviconCache[url] = {
+      ok: !!ok,
+      savedAt: Date.now()
+    };
+    saveFaviconCache();
   }
 
   /* ====== Auth handlers ====== */
@@ -491,13 +561,26 @@
     img.style.display = 'none';
     var favUrl = NavBookmarks.getFaviconUrl(bm.url);
     if (favUrl) {
-      img.src = favUrl;
-      img.style.display = '';
-      fallback.style.display = 'none';
-      img.onerror = function () {
-        img.style.display = 'none';
-        fallback.style.display = '';
-      };
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.referrerPolicy = 'no-referrer';
+      var cachedFavicon = getFaviconCacheEntry(favUrl);
+      if (faviconLoader && (!cachedFavicon || cachedFavicon.ok)) {
+        faviconLoader.enqueue({
+          url: favUrl,
+          img: img,
+          onComplete: function (ok) {
+            rememberFaviconResult(favUrl, ok);
+            if (!ok) {
+              img.style.display = 'none';
+              fallback.style.display = '';
+              return;
+            }
+            img.style.display = '';
+            fallback.style.display = 'none';
+          }
+        });
+      }
     } else {
       img.style.display = 'none';
     }
