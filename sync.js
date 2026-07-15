@@ -96,7 +96,19 @@ var NavSync = (function () {
     migrateLegacyStorage();
     var cats = parseStoredArray(key('categories'));
     var bms = parseStoredArray(key('bookmarks'));
-    var se = parseStoredArray(key('search_engines'));
+    var raw = parseStoredArray(key('search_engines'));
+    // Deduplicate by URL on every load to self-heal previously accumulated duplicates
+    var seenUrls = {};
+    var se = raw.filter(function(e) {
+      var u = (e.url || '').trim();
+      if (!u || seenUrls[u]) return false;
+      seenUrls[u] = true;
+      return true;
+    });
+    if (se.length !== raw.length) {
+      // Persist the cleaned list immediately
+      localStorage.setItem(key('search_engines'), JSON.stringify(se));
+    }
     return { categories: cats, bookmarks: bms, searchEngines: se };
   }
 
@@ -364,7 +376,19 @@ var NavSync = (function () {
       }
     });
 
-    return { categories: uniqueCats, bookmarks: uniqueBms, searchEngines: data.searchEngines || [] };
+    // Search engine dedup by URL (same engine may have accumulated multiple UUIDs)
+    var uniqueEngines = [];
+    var engineUrlMap = {};
+    (data.searchEngines || []).sort(function(a, b) {
+      return new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime();
+    }).forEach(function(e) {
+      var key = (e.url || '').trim();
+      if (key && !engineUrlMap[key]) {
+        engineUrlMap[key] = e;
+        uniqueEngines.push(e);
+      }
+    });
+    return { categories: uniqueCats, bookmarks: uniqueBms, searchEngines: uniqueEngines };
   }
 
   /* ---- 合并策略：时间戳对比，最后写入胜出 ---- */
@@ -451,6 +475,15 @@ var NavSync = (function () {
       }
     });
     mergedEngines.sort(function(a, b) { return a.sort_order - b.sort_order; });
+
+    // Secondary dedup by URL in case same engine exists with different IDs
+    var seenUrls = {};
+    mergedEngines = mergedEngines.filter(function(e) {
+      var u = (e.url || '').trim();
+      if (!u || seenUrls[u]) return false;
+      seenUrls[u] = true;
+      return true;
+    });
 
     return { categories: mergedCats, bookmarks: mergedBms, searchEngines: mergedEngines };
   }

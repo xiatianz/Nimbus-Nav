@@ -59,8 +59,9 @@
       })
       : null;
 
-    // 加载本地数据并立即渲染（避免空白闪烁）
-    NavSync.setOwner(null);
+    // 预加载上次登录用户的缓存，刷新时无需等待 auth 回调即可立即渲染书签
+    var lastUserId = localStorage.getItem('nav_last_user_id');
+    NavSync.setOwner(lastUserId || null);
     NavSync.initDefaultData();
     var local = NavSync.loadLocal();
     categories = local.categories;
@@ -295,6 +296,7 @@
 
   async function handleLoggedIn(user) {
     currentUser = user;
+    localStorage.setItem('nav_last_user_id', user.id);
     NavSync.setOwner(user.id, { adoptGuest: true });
     NavSync.initDefaultData();
     var scopedLocal = NavSync.loadLocal();
@@ -350,6 +352,7 @@
   function handleLoggedOut() {
     NavSync.resetMergeState();
     currentUser = null;
+    localStorage.removeItem('nav_last_user_id');
     loginBtn.style.display = '';
     userMenu.style.display = 'none';
     userDropdown.classList.remove('open');
