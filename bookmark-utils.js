@@ -34,7 +34,7 @@
       var value = normalizeBookmarkUrl(url);
       var parsed = new URL(value);
       if (!/^https?:$/.test(parsed.protocol)) return '';
-      return 'https://favicon.im/' + parsed.hostname.replace(/^www\./, '');
+      return new URL('/favicon.ico', parsed.origin).href;
     } catch (e) {
       return '';
     }

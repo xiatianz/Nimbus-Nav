@@ -64,7 +64,7 @@ var NavDB = (function () {
       email: email,
       password: password,
       options: {
-        emailRedirectTo: 'https://nav.ehon.cn'
+        emailRedirectTo: window.location.origin + window.location.pathname
       }
     });
     if (_ref.error) throw _ref.error;
@@ -362,6 +362,12 @@ var NavDB = (function () {
     dataOrThrow(await sb.from('search_engines').upsert(rows, { onConflict: 'id' }));
   }
 
+  async function deleteSearchEngine(id) {
+    if (!isLoggedIn()) return;
+    var sb = getClient();
+    dataOrThrow(await sb.from('search_engines').delete().eq('id', id).eq('user_id', currentUser.id));
+  }
+
   async function pushAll(cats, bms, engines) {
     await upsertCategories(cats);
     await upsertBookmarks(bms);
@@ -403,6 +409,7 @@ var NavDB = (function () {
     deleteBookmark: deleteBookmark,
     fetchAll: fetchAll,
     upsertSearchEngines: upsertSearchEngines,
+    deleteSearchEngine: deleteSearchEngine,
     pushAll: pushAll
   };
 })();

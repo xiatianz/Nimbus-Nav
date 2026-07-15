@@ -8,9 +8,10 @@ function testInitialUsesNameFirst() {
   }), 'F');
 }
 
-function testFaviconUrlUsesFaviconIm() {
+function testFaviconUrlUsesFaviconIco() {
   const url = NavBookmarks.getFaviconUrl('https://example.com/docs');
-  assert.strictEqual(url, 'https://favicon.im/example.com');
+  // favicon is loaded directly from the site's origin; no third-party service
+  assert.strictEqual(url, 'https://example.com/favicon.ico');
 }
 
 function testRecentBookmarksSortByLastVisit() {
@@ -98,7 +99,7 @@ async function testFaviconLoaderTimesOutAndContinues() {
 
 async function run() {
   testInitialUsesNameFirst();
-  testFaviconUrlUsesFaviconIm();
+  testFaviconUrlUsesFaviconIco();
   testRecentBookmarksSortByLastVisit();
   await testFaviconLoaderLimitsConcurrency();
   await testFaviconLoaderTimesOutAndContinues();

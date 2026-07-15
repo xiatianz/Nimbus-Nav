@@ -40,10 +40,11 @@
   var userDropdown, logoutBtn;
   var bookmarkModal, categoryModal;
   var engineModal, engineModalTitle, engineNameInput, engineUrlInput;
-  var engineDeleteBtn, engineCancelBtn, engineConfirmBtn, engineEditIdInput;
+  var engineDeleteBtn, engineCancelBtn, engineConfirmBtn, engineEditIdInput, engineNewBtn;
   var confirmModal, confirmMessage, confirmOkBtn, confirmCancelBtn;
   var passkeyModal, passkeyListEl;
   var toastContainer;
+  var modalOpeners = new WeakMap();
 
   /* ====== Init ====== */
   async function init() {
@@ -59,6 +60,7 @@
       : null;
 
     // 加载本地数据并立即渲染（避免空白闪烁）
+    NavSync.setOwner(null);
     NavSync.initDefaultData();
     var local = NavSync.loadLocal();
     categories = local.categories;
@@ -68,8 +70,15 @@
     openMode = localStorage.getItem(LS_OPEN_MODE) || 'new';
     updateOpenModeButtons();
     renderAll();
+    initTheme();
+    initClock();
+    registerServiceWorker();
 
     // 初始化 Supabase
+    if (typeof supabase === 'undefined') {
+      showToast('云同步组件加载失败，本地书签仍可使用', 'error');
+      return;
+    }
     NavDB.init();
 
     // 监听认证状态变化
@@ -135,10 +144,6 @@
       handleLoggedIn(user);
     }
 
-    // 主题
-    initTheme();
-    // 时钟
-    initClock();
   }
 
   function cacheDom() {
@@ -170,6 +175,7 @@
     engineCancelBtn = $('#engineCancelBtn');
     engineConfirmBtn = $('#engineConfirmBtn');
     engineEditIdInput = $('#engineEditId');
+    engineNewBtn = $('#engineNewBtn');
 
     confirmModal = $('#confirmModal');
     confirmMessage = $('#confirmMessage');
@@ -178,6 +184,47 @@
     passkeyModal = $('#passkeyModal');
     passkeyListEl = $('#passkeyList');
     toastContainer = $('#toastContainer');
+  }
+
+  function getActiveModals() {
+    return Array.prototype.slice.call(document.querySelectorAll('.modal-overlay.active'));
+  }
+
+  function getTopModal() {
+    return getActiveModals().sort(function (a, b) {
+      return (parseInt(getComputedStyle(a).zIndex, 10) || 0) - (parseInt(getComputedStyle(b).zIndex, 10) || 0);
+    }).pop() || null;
+  }
+
+  function syncModalPageState() {
+    var hasOpenModal = getActiveModals().length > 0;
+    var page = $('.container');
+    if (page) page.inert = hasOpenModal;
+    document.body.classList.toggle('modal-open', hasOpenModal);
+  }
+
+  function activateModal(modal, focusTarget) {
+    if (!modal) return;
+    if (!modal.classList.contains('active')) modalOpeners.set(modal, document.activeElement);
+    modal.classList.add('active');
+    modal.setAttribute('aria-hidden', 'false');
+    syncModalPageState();
+    setTimeout(function () {
+      var target = focusTarget || modal.querySelector('input, select, button, [tabindex]:not([tabindex="-1"])');
+      if (target && typeof target.focus === 'function') target.focus();
+    }, 0);
+  }
+
+  function deactivateModal(modal) {
+    if (!modal) return;
+    modal.classList.remove('active');
+    modal.setAttribute('aria-hidden', 'true');
+    syncModalPageState();
+    var opener = modalOpeners.get(modal);
+    modalOpeners.delete(modal);
+    if (opener && document.contains(opener) && typeof opener.focus === 'function') {
+      setTimeout(function () { opener.focus(); }, 0);
+    }
   }
 
   function scheduleFaviconLoad(callback) {
@@ -248,6 +295,14 @@
 
   async function handleLoggedIn(user) {
     currentUser = user;
+    NavSync.setOwner(user.id, { adoptGuest: true });
+    NavSync.initDefaultData();
+    var scopedLocal = NavSync.loadLocal();
+    categories = scopedLocal.categories;
+    bookmarks = scopedLocal.bookmarks;
+    searchEngines = scopedLocal.searchEngines || [];
+    currentEngine = null;
+    visitStats = loadVisitStats();
     loginBtn.style.display = 'none';
     userMenu.style.display = '';
     
@@ -293,11 +348,21 @@
   }
 
   function handleLoggedOut() {
+    NavSync.resetMergeState();
     currentUser = null;
     loginBtn.style.display = '';
     userMenu.style.display = 'none';
     userDropdown.classList.remove('open');
-    NavSync.resetMergeState();
+    userAvatar.removeAttribute('src');
+    NavSync.setOwner(null);
+    NavSync.initDefaultData();
+    var local = NavSync.loadLocal();
+    categories = local.categories;
+    bookmarks = local.bookmarks;
+    searchEngines = local.searchEngines || [];
+    currentEngine = null;
+    visitStats = loadVisitStats();
+    renderAll();
     showToast('已退出登录');
   }
 
@@ -315,6 +380,7 @@
       e.updated_at = new Date().toISOString();
     });
     NavSync.saveLocal({ searchEngines: searchEngines });
+    NavSync.markDirty();
     NavSync.requestSync();
     renderSearchEngines();
   }
@@ -325,9 +391,9 @@
     
     searchEngines.sort(function(a, b) { return a.sort_order - b.sort_order; });
     
-    if (!currentEngine && searchEngines.length > 0) {
-      currentEngine = searchEngines[0];
-    }
+    currentEngine = currentEngine
+      ? searchEngines.find(function (engine) { return engine.id === currentEngine.id; }) || searchEngines[0] || null
+      : searchEngines[0] || null;
     
     searchEngines.forEach(function(engine) {
       var tag = document.createElement('button');
@@ -336,6 +402,7 @@
       if (currentEngine && currentEngine.id === engine.id) {
         tag.classList.add('active');
       }
+      tag.setAttribute('aria-pressed', currentEngine && currentEngine.id === engine.id ? 'true' : 'false');
       tag.textContent = engine.name;
       tag.setAttribute('data-id', engine.id);
       tag.setAttribute('data-url', engine.url);
@@ -363,7 +430,9 @@
       
       tag.addEventListener('click', function () {
         document.querySelectorAll('#searchEnginesContainer .engine-tag').forEach(function (t) { t.classList.remove('active'); });
+        document.querySelectorAll('#searchEnginesContainer .engine-tag').forEach(function (t) { t.setAttribute('aria-pressed', 'false'); });
         tag.classList.add('active');
+        tag.setAttribute('aria-pressed', 'true');
         currentEngine = engine;
         updateSearchSuggestions();
       });
@@ -380,12 +449,40 @@
     var addBtn = document.createElement('button');
     addBtn.type = 'button';
     addBtn.className = 'engine-tag add-engine-btn';
-    addBtn.innerHTML = '➕';
-    addBtn.title = '添加/编辑引擎';
+    addBtn.textContent = '⚙';
+    addBtn.title = '管理搜索引擎';
+    addBtn.setAttribute('aria-label', '管理搜索引擎');
     addBtn.addEventListener('click', function() {
-       openEngineModal(null);
+       openEngineModal(currentEngine || null);
     });
     container.appendChild(addBtn);
+  }
+
+  /* ====== Touch Long-Press Helper ====== */
+  // iOS Safari does not reliably fire contextmenu on long-press for <a> and non-input elements.
+  // This helper supplements contextmenu with a 500ms touch-hold that calls the same handler.
+  function addLongPressHandler(element, handler) {
+    var timer = null;
+    var moved = false;
+    element.addEventListener('touchstart', function (e) {
+      moved = false;
+      timer = setTimeout(function () {
+        if (!moved) {
+          e.preventDefault();
+          handler(e);
+        }
+      }, 500);
+    }, { passive: false });
+    element.addEventListener('touchmove', function () {
+      moved = true;
+      clearTimeout(timer);
+    }, { passive: true });
+    element.addEventListener('touchend', function () {
+      clearTimeout(timer);
+    }, { passive: true });
+    element.addEventListener('touchcancel', function () {
+      clearTimeout(timer);
+    }, { passive: true });
   }
 
   function renderAll() {
@@ -407,6 +504,7 @@
     addCatWrap.style.textAlign = 'center';
     addCatWrap.style.marginTop = '16px';
     var addCatBtn = document.createElement('button');
+    addCatBtn.type = 'button';
     addCatBtn.className = 'add-category-btn';
     addCatBtn.innerHTML = '➕ 添加分类';
     addCatBtn.addEventListener('click', function () { openCategoryModal(); });
@@ -453,6 +551,7 @@
       e.preventDefault();
       openCategoryModal(cat);
     });
+    addLongPressHandler(header, function () { openCategoryModal(cat); });
 
     var title = document.createElement('h2');
     title.className = 'category-title';
@@ -462,9 +561,11 @@
     actions.className = 'category-actions';
 
     var editBtn = document.createElement('button');
+    editBtn.type = 'button';
     editBtn.className = 'cat-action-btn';
     editBtn.innerHTML = '✏️';
     editBtn.title = '编辑分类';
+    editBtn.setAttribute('aria-label', '编辑分类「' + cat.name + '」');
     editBtn.addEventListener('click', function () { openCategoryModal(cat); });
     actions.appendChild(editBtn);
 
@@ -504,6 +605,7 @@
 
     // 添加书签按钮
     var addBtn = document.createElement('button');
+    addBtn.type = 'button';
     addBtn.className = 'card card-add';
     addBtn.innerHTML = '<div class="card-icon emoji">➕</div><div class="card-title">添加</div><div class="card-desc">新增书签</div>';
     addBtn.addEventListener('click', function () { openBookmarkModal(cat.id); });
@@ -515,6 +617,10 @@
 
   function renderBookmarkCard(bm, options) {
     options = options || {};
+    var shell = document.createElement('div');
+    shell.className = 'card-shell' + (options.recent ? ' card-shell-recent' : '');
+    shell.dataset.bmId = bm.id;
+
     var a = document.createElement('a');
     a.className = 'card' + (options.recent ? ' card-recent' : '');
     a.href = bm.url;
@@ -534,11 +640,11 @@
         draggedBookmarkId = bm.id;
         e.stopPropagation();
         e.dataTransfer.effectAllowed = 'move';
-        a.classList.add('dragging');
+        shell.classList.add('dragging');
       });
       a.addEventListener('dragend', function () {
         draggedBookmarkId = null;
-        a.classList.remove('dragging');
+        shell.classList.remove('dragging');
       });
       a.addEventListener('dragover', function (e) {
         if (draggedBookmarkId && draggedBookmarkId !== bm.id) e.preventDefault();
@@ -555,6 +661,7 @@
         e.stopPropagation();
         openBookmarkModal(null, bm);
       });
+      addLongPressHandler(a, function () { openBookmarkModal(null, bm); });
     }
 
     // Icon
@@ -610,9 +717,11 @@
       actionsEl.className = 'card-actions';
 
       var editBtn = document.createElement('button');
-      editBtn.className = 'card-action-btn';
-      editBtn.innerHTML = '✎';
-      editBtn.title = '编辑';
+      editBtn.type = 'button';
+      editBtn.className = 'card-action-btn card-action-edit';
+      editBtn.textContent = '⋯';
+      editBtn.title = '管理书签';
+      editBtn.setAttribute('aria-label', '管理书签「' + bm.name + '」');
       editBtn.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -620,30 +729,45 @@
       });
 
       var delBtn = document.createElement('button');
-      delBtn.className = 'card-action-btn danger';
-      delBtn.innerHTML = '×';
-      delBtn.title = '删除';
+      delBtn.type = 'button';
+      delBtn.className = 'card-action-btn card-action-delete danger';
+      delBtn.textContent = '×';
+      delBtn.title = '删除书签';
+      delBtn.setAttribute('aria-label', '删除书签「' + bm.name + '」');
       delBtn.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        showConfirmDialog('确定删除「' + bm.name + '」？', async function () {
-          NavSync.deleteBookmarkLocal(bm.id);
-          bookmarks = bookmarks.filter(function (b) { return b.id !== bm.id; });
-          renderAll();
-          showToast('已删除「' + bm.name + '」');
-        });
+        confirmBookmarkDeletion(bm);
       });
 
       actionsEl.appendChild(editBtn);
       actionsEl.appendChild(delBtn);
-      a.appendChild(actionsEl);
+      shell.appendChild(actionsEl);
     }
 
     a.appendChild(iconWrap);
     a.appendChild(titleEl);
     a.appendChild(descEl);
 
-    return a;
+    shell.insertBefore(a, shell.firstChild);
+    return shell;
+  }
+
+  function confirmBookmarkDeletion(bookmark) {
+    if (!bookmark) return;
+    showConfirmDialog('确定删除「' + bookmark.name + '」？', function () {
+      NavSync.deleteBookmarkLocal(bookmark.id);
+      bookmarks = bookmarks.filter(function (item) { return item.id !== bookmark.id; });
+      renderAll();
+      showToast('已删除「' + bookmark.name + '」');
+    });
+  }
+
+  function deleteEditingBookmark() {
+    var bookmark = bookmarks.find(function (item) { return item.id === editingBookmarkId; });
+    if (!bookmark) return;
+    closeBookmarkModal();
+    confirmBookmarkDeletion(bookmark);
   }
 
   /* ====== Custom Confirm Dialog ====== */
@@ -652,12 +776,11 @@
     confirmMessage.textContent = msg;
     confirmCallback = onConfirm;
     document.body.appendChild(confirmModal);
-    confirmModal.classList.add('active');
-    confirmOkBtn.focus();
+    activateModal(confirmModal, confirmOkBtn);
   }
 
   function closeConfirmModal() {
-    confirmModal.classList.remove('active');
+    deactivateModal(confirmModal);
     confirmCallback = null;
   }
 
@@ -678,12 +801,12 @@
       return;
     }
 
-    openSearchSuggestion(NavSearch.getDirectAction(query, currentEngine ? currentEngine.url : ''));
+    openSearchSuggestion(NavSearch.getDirectAction(query, getCurrentEngineUrl()));
   }
 
   function updateSearchSuggestions() {
     var query = searchInput.value.trim();
-    searchSuggestions = NavSearch.buildSuggestions(query, bookmarks, currentEngine ? currentEngine.url : '');
+    searchSuggestions = NavSearch.buildSuggestions(query, bookmarks, getCurrentEngineUrl());
     selectedSuggestionIndex = searchSuggestions.length > 0 ? 0 : -1;
     applyCardSearchState(query);
     renderSearchSuggestions();
@@ -700,6 +823,7 @@
       var item = document.createElement('button');
       item.type = 'button';
       item.className = 'search-suggestion' + (index === selectedSuggestionIndex ? ' active' : '');
+      item.id = 'searchSuggestion-' + index;
       item.setAttribute('role', 'option');
       item.setAttribute('aria-selected', index === selectedSuggestionIndex ? 'true' : 'false');
       item.dataset.index = String(index);
@@ -727,6 +851,7 @@
         selectedSuggestionIndex = index;
         item.classList.add('active');
         item.setAttribute('aria-selected', 'true');
+        searchInput.setAttribute('aria-activedescendant', item.id);
       });
       item.addEventListener('mousedown', function (e) {
         e.preventDefault();
@@ -740,6 +865,8 @@
       searchSuggestionsEl.appendChild(item);
     });
     searchSuggestionsEl.hidden = false;
+    searchInput.setAttribute('aria-expanded', 'true');
+    searchInput.setAttribute('aria-activedescendant', selectedSuggestionIndex >= 0 ? 'searchSuggestion-' + selectedSuggestionIndex : '');
   }
 
   function closeSearchSuggestions() {
@@ -747,6 +874,8 @@
     selectedSuggestionIndex = -1;
     searchSuggestionsEl.innerHTML = '';
     searchSuggestionsEl.hidden = true;
+    searchInput.setAttribute('aria-expanded', 'false');
+    searchInput.setAttribute('aria-activedescendant', '');
     if (!searchInput.value.trim()) applyCardSearchState('');
   }
 
@@ -759,13 +888,12 @@
   function openSearchSuggestion(suggestion) {
     if (!suggestion || !suggestion.url) return;
     closeSearchSuggestions();
-    if (suggestion.type === 'bookmark') {
-      if (suggestion.bookmark) recordBookmarkVisit(suggestion.bookmark.id);
-      if (openMode === 'new') {
-        window.open(suggestion.url, '_blank');
-      } else {
-        window.location.href = suggestion.url;
-      }
+    if (suggestion.type === 'bookmark' && suggestion.bookmark) {
+      recordBookmarkVisit(suggestion.bookmark.id);
+    }
+    if (openMode === 'new') {
+      var opened = window.open(suggestion.url, '_blank', 'noopener,noreferrer');
+      if (opened) opened.opener = null;
     } else {
       window.location.href = suggestion.url;
     }
@@ -795,14 +923,14 @@
 
   function loadVisitStats() {
     try {
-      return JSON.parse(localStorage.getItem(LS_VISIT_STATS) || '{}') || {};
+      return JSON.parse(localStorage.getItem(LS_VISIT_STATS + '_' + encodeURIComponent(NavSync.getOwner())) || '{}') || {};
     } catch (e) {
       return {};
     }
   }
 
   function saveVisitStats() {
-    localStorage.setItem(LS_VISIT_STATS, JSON.stringify(visitStats));
+    localStorage.setItem(LS_VISIT_STATS + '_' + encodeURIComponent(NavSync.getOwner()), JSON.stringify(visitStats));
   }
 
   function recordBookmarkVisit(id) {
@@ -889,6 +1017,82 @@
     renderAll();
   }
 
+  function moveCategoryByOffset(id, delta) {
+    var sorted = categories.slice().sort(function (a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+    var index = sorted.findIndex(function (category) { return category.id === id; });
+    var target = index + delta;
+    if (index < 0 || target < 0 || target >= sorted.length) return;
+    var temp = sorted[index];
+    sorted[index] = sorted[target];
+    sorted[target] = temp;
+    sorted.forEach(function (category, order) {
+      category.sort_order = order;
+      NavSync.updateCategoryLocal(category.id, { sort_order: order });
+    });
+    categories = sorted;
+    renderAll();
+    updateReorderControls();
+  }
+
+  function moveBookmarkByOffset(id, delta) {
+    var bookmark = bookmarks.find(function (item) { return item.id === id; });
+    if (!bookmark) return;
+    var siblings = bookmarks.filter(function (item) { return item.category_id === bookmark.category_id; })
+      .sort(function (a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+    var index = siblings.findIndex(function (item) { return item.id === id; });
+    var target = index + delta;
+    if (index < 0 || target < 0 || target >= siblings.length) return;
+    var temp = siblings[index];
+    siblings[index] = siblings[target];
+    siblings[target] = temp;
+    siblings.forEach(function (item, order) {
+      item.sort_order = order;
+      NavSync.updateBookmarkLocal(item.id, { sort_order: order });
+    });
+    renderAll();
+    updateReorderControls();
+  }
+
+  function moveEngineByOffset(id, delta) {
+    var sorted = searchEngines.slice().sort(function (a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+    var index = sorted.findIndex(function (engine) { return engine.id === id; });
+    var target = index + delta;
+    if (index < 0 || target < 0 || target >= sorted.length) return;
+    var temp = sorted[index];
+    sorted[index] = sorted[target];
+    sorted[target] = temp;
+    sorted.forEach(function (engine, order) {
+      engine.sort_order = order;
+      engine.updated_at = new Date().toISOString();
+    });
+    searchEngines = sorted;
+    NavSync.saveLocal({ searchEngines: searchEngines });
+    NavSync.markDirty();
+    NavSync.requestSync();
+    renderSearchEngines();
+    updateReorderControls();
+  }
+
+  function updateReorderControls() {
+    var bookmark = bookmarks.find(function (item) { return item.id === editingBookmarkId; });
+    var bookmarkSiblings = bookmark ? bookmarks.filter(function (item) { return item.category_id === bookmark.category_id; })
+      .sort(function (a, b) { return (a.sort_order || 0) - (b.sort_order || 0); }) : [];
+    var bookmarkIndex = bookmarkSiblings.findIndex(function (item) { return item.id === editingBookmarkId; });
+    if ($('#bmMoveUpBtn')) $('#bmMoveUpBtn').disabled = bookmarkIndex <= 0;
+    if ($('#bmMoveDownBtn')) $('#bmMoveDownBtn').disabled = bookmarkIndex < 0 || bookmarkIndex >= bookmarkSiblings.length - 1;
+
+    var categoryOrder = categories.slice().sort(function (a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+    var categoryIndex = categoryOrder.findIndex(function (item) { return item.id === editingCategoryId; });
+    if ($('#catMoveUpBtn')) $('#catMoveUpBtn').disabled = categoryIndex <= 0;
+    if ($('#catMoveDownBtn')) $('#catMoveDownBtn').disabled = categoryIndex < 0 || categoryIndex >= categoryOrder.length - 1;
+
+    var engineId = engineEditIdInput ? engineEditIdInput.value : '';
+    var engineOrder = searchEngines.slice().sort(function (a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+    var engineIndex = engineOrder.findIndex(function (item) { return item.id === engineId; });
+    if ($('#engineMoveLeftBtn')) $('#engineMoveLeftBtn').disabled = engineIndex <= 0;
+    if ($('#engineMoveRightBtn')) $('#engineMoveRightBtn').disabled = engineIndex < 0 || engineIndex >= engineOrder.length - 1;
+  }
+
   /* ====== Bookmark Modal ====== */
 
   function openEngineModal(existingEngine) {
@@ -898,19 +1102,23 @@
       engineNameInput.value = existingEngine.name;
       engineUrlInput.value = existingEngine.url;
       engineDeleteBtn.style.display = 'inline-block';
+      if (engineNewBtn) engineNewBtn.style.display = 'inline-block';
+      $('#engineReorderControls').hidden = false;
     } else {
       engineEditIdInput.value = '';
       engineModalTitle.textContent = '添加引擎';
       engineNameInput.value = '';
       engineUrlInput.value = '';
       engineDeleteBtn.style.display = 'none';
+      if (engineNewBtn) engineNewBtn.style.display = 'none';
+      $('#engineReorderControls').hidden = true;
     }
-    engineModal.classList.add('active');
-    engineNameInput.focus();
+    updateReorderControls();
+    activateModal(engineModal, engineNameInput);
   }
 
   function closeEngineModal() {
-    engineModal.classList.remove('active');
+    deactivateModal(engineModal);
   }
 
   function saveEngine() {
@@ -923,8 +1131,11 @@
       return;
     }
 
-    if (!/^https?:\/\//.test(url)) {
-      url = 'https://' + url;
+    url = normalizeHttpUrl(url);
+    if (!url) {
+      showToast('请输入有效的 HTTP 或 HTTPS 搜索地址', 'error');
+      engineUrlInput.focus();
+      return;
     }
 
     if (id) {
@@ -948,6 +1159,7 @@
 
     closeEngineModal();
     NavSync.saveLocal({ searchEngines: searchEngines });
+    NavSync.markDirty();
     NavSync.requestSync();
     renderSearchEngines();
   }
@@ -955,24 +1167,25 @@
   function deleteEngine() {
     var id = engineEditIdInput.value;
     if (!id) return;
-    
-    if (confirm('确定要删除该引擎吗？')) {
-      searchEngines = searchEngines.filter(function(e) { return e.id !== id; });
+
+    showConfirmDialog('确定删除当前搜索引擎？', function () {
+      searchEngines = NavSync.deleteSearchEngineLocal(id);
       if (currentEngine && currentEngine.id === id) {
         currentEngine = searchEngines.length > 0 ? searchEngines[0] : null;
       }
       showToast('引擎已删除');
       closeEngineModal();
-      NavSync.saveLocal({ searchEngines: searchEngines });
       NavSync.requestSync();
       renderSearchEngines();
-    }
+    });
   }
 
   function openBookmarkModal(categoryId, existingBm) {
     editingBookmarkId = existingBm ? existingBm.id : null;
     var titleEl = $('#bookmarkModalTitle');
     titleEl.textContent = existingBm ? '编辑书签' : '添加书签';
+    $('#bmDeleteBtn').style.display = existingBm ? '' : 'none';
+    $('#bmReorderControls').hidden = !existingBm;
 
     // 填充分类下拉
     var select = $('#bmCategory');
@@ -996,12 +1209,12 @@
       if (categoryId) select.value = categoryId;
     }
 
-    bookmarkModal.classList.add('active');
-    setTimeout(function () { $('#bmName').focus(); }, 100);
+    updateReorderControls();
+    activateModal(bookmarkModal, $('#bmName'));
   }
 
   function closeBookmarkModal() {
-    bookmarkModal.classList.remove('active');
+    deactivateModal(bookmarkModal);
     editingBookmarkId = null;
   }
 
@@ -1016,8 +1229,11 @@
       return;
     }
 
-    if (!/^https?:\/\//.test(url)) {
-      url = 'https://' + url;
+    url = normalizeHttpUrl(url);
+    if (!url) {
+      showToast('请输入有效的 HTTP 或 HTTPS 网址', 'error');
+      $('#bmUrl').focus();
+      return;
     }
 
     if (editingBookmarkId) {
@@ -1053,16 +1269,18 @@
     var deleteBtn = $('#catDeleteBtn');
     if (existingCat) {
       deleteBtn.style.display = '';
+      $('#catReorderControls').hidden = false;
     } else {
       deleteBtn.style.display = 'none';
+      $('#catReorderControls').hidden = true;
     }
 
-    categoryModal.classList.add('active');
-    setTimeout(function () { $('#catName').focus(); }, 100);
+    updateReorderControls();
+    activateModal(categoryModal, $('#catName'));
   }
 
   function closeCategoryModal() {
-    categoryModal.classList.remove('active');
+    deactivateModal(categoryModal);
     editingCategoryId = null;
   }
 
@@ -1126,12 +1344,11 @@
       passkeyBtn.style.display = '';
     }
 
-    authModal.classList.add('active');
-    setTimeout(function () { $('#authEmail').focus(); }, 100);
+    activateModal(authModal, $('#authEmail'));
   }
 
   function closeAuthModal() {
-    authModal.classList.remove('active');
+    deactivateModal(authModal);
   }
 
   function switchAuthTab(mode) {
@@ -1145,6 +1362,8 @@
     if (mode === 'register') {
       tabLogin.classList.remove('active');
       tabRegister.classList.add('active');
+      tabLogin.setAttribute('aria-pressed', 'false');
+      tabRegister.setAttribute('aria-pressed', 'true');
       submitBtn.textContent = '注册';
       forgotLink.style.display = 'none';
       titleEl.textContent = '创建账号';
@@ -1153,6 +1372,8 @@
     } else {
       tabRegister.classList.remove('active');
       tabLogin.classList.add('active');
+      tabLogin.setAttribute('aria-pressed', 'true');
+      tabRegister.setAttribute('aria-pressed', 'false');
       submitBtn.textContent = '登录';
       forgotLink.style.display = '';
       titleEl.textContent = '欢迎回来';
@@ -1235,8 +1456,7 @@
     resetView.style.display = 'none';
     confirmView.style.display = 'none';
     if ($('#updatePasswordView')) $('#updatePasswordView').style.display = '';
-    authModal.classList.add('active');
-    setTimeout(function () { if ($('#updatePasswordInput')) $('#updatePasswordInput').focus(); }, 100);
+    activateModal(authModal, $('#updatePasswordInput'));
   }
 
   async function submitUpdatePassword() {
@@ -1295,12 +1515,12 @@
 
   function openPasskeyModal() {
     userDropdown.classList.remove('open');
-    passkeyModal.classList.add('active');
+    activateModal(passkeyModal, $('#addPasskeyBtn'));
     loadPasskeyList();
   }
 
   function closePasskeyModal() {
-    passkeyModal.classList.remove('active');
+    deactivateModal(passkeyModal);
   }
 
   async function loadPasskeyList() {
@@ -1353,8 +1573,8 @@
           + '<div class="passkey-item-date">创建于 ' + createdAt + '</div>'
           + '</div>'
           + '<div class="passkey-item-actions">'
-          + '<button class="passkey-rename-btn" data-cred-id="' + (cred.id || '') + '" data-name="' + escapeHtml(name) + '">改名</button>'
-          + '<button class="passkey-delete-btn" data-cred-id="' + (cred.id || '') + '" data-name="' + escapeHtml(name) + '">删除</button>'
+          + '<button type="button" class="passkey-rename-btn" data-cred-id="' + escapeHtml(cred.id || '') + '" data-name="' + escapeHtml(name) + '">改名</button>'
+          + '<button type="button" class="passkey-delete-btn" data-cred-id="' + escapeHtml(cred.id || '') + '" data-name="' + escapeHtml(name) + '">删除</button>'
           + '</div>'
           + '</div>';
       });
@@ -1442,21 +1662,52 @@
 
   function initTheme() {
     var themeBtn = document.createElement('button');
+    themeBtn.type = 'button';
     themeBtn.className = 'theme-toggle';
-    themeBtn.title = '切换深色/浅色模式';
     themeBtn.textContent = '🌓';
 
-    var isDark = localStorage.getItem('neumorph_dark') === 'true';
-    if (isDark) document.body.classList.add('dark');
+    var storedTheme = localStorage.getItem('neumorph_theme');
+    if (!storedTheme && localStorage.getItem('neumorph_dark') !== null) {
+      storedTheme = localStorage.getItem('neumorph_dark') === 'true' ? 'dark' : 'light';
+      localStorage.setItem('neumorph_theme', storedTheme);
+      localStorage.removeItem('neumorph_dark');
+    }
+    var media = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+    function applyTheme(mode) {
+      var dark = mode === 'dark' || (mode === 'auto' && media && media.matches);
+      document.body.classList.toggle('dark', !!dark);
+      themeBtn.title = dark ? '切换到浅色模式' : '切换到深色模式';
+      themeBtn.setAttribute('aria-label', themeBtn.title);
+      themeBtn.setAttribute('aria-pressed', dark ? 'true' : 'false');
+      var themeMeta = document.querySelector('meta[name="theme-color"]');
+      if (themeMeta) themeMeta.setAttribute('content', dark ? '#0f172a' : '#2563eb');
+    }
+
+    applyTheme(storedTheme || 'auto');
 
     themeBtn.addEventListener('click', function () {
-      document.body.classList.toggle('dark');
-      localStorage.setItem('neumorph_dark', document.body.classList.contains('dark'));
+      var next = document.body.classList.contains('dark') ? 'light' : 'dark';
+      localStorage.setItem('neumorph_theme', next);
+      applyTheme(next);
     });
+
+    if (media && typeof media.addEventListener === 'function') {
+      media.addEventListener('change', function () {
+        if (!localStorage.getItem('neumorph_theme')) applyTheme('auto');
+      });
+    }
 
     // 插入到 header-right 区域最前面
     var headerRight = $('#authArea');
     headerRight.insertBefore(themeBtn, headerRight.firstChild);
+  }
+
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
+    navigator.serviceWorker.register('./sw.js').catch(function (error) {
+      console.warn('离线服务注册失败:', error.message);
+    });
   }
 
   /* ====== Clock ====== */
@@ -1486,6 +1737,7 @@
     var el = document.createElement('div');
     el.className = 'toast' + (type ? ' ' + type : '');
     el.textContent = msg;
+    el.setAttribute('role', type === 'error' ? 'alert' : 'status');
     toastContainer.appendChild(el);
 
     setTimeout(function () {
@@ -1502,6 +1754,23 @@
     } catch (e) {
       return '';
     }
+  }
+
+  function normalizeHttpUrl(value) {
+    var url = String(value || '').trim();
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    try {
+      var parsed = new URL(url);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+      return parsed.href;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function getCurrentEngineUrl() {
+    if (currentEngine && currentEngine.url) return currentEngine.url;
+    return 'https://www.baidu.com/s?wd=';
   }
 
   /* ====== Dropdown Identity Check ====== */
@@ -1564,6 +1833,9 @@
     engineCancelBtn.addEventListener('click', closeEngineModal);
     engineConfirmBtn.addEventListener('click', saveEngine);
     engineDeleteBtn.addEventListener('click', deleteEngine);
+    if (engineNewBtn) engineNewBtn.addEventListener('click', function () { openEngineModal(null); });
+    $('#engineMoveLeftBtn').addEventListener('click', function () { moveEngineByOffset(engineEditIdInput.value, -1); });
+    $('#engineMoveRightBtn').addEventListener('click', function () { moveEngineByOffset(engineEditIdInput.value, 1); });
     engineModal.addEventListener('click', function(e) {
       if (e.target === engineModal) closeEngineModal();
     });
@@ -1605,9 +1877,9 @@
     $('#tabRegister').addEventListener('click', function () { switchAuthTab('register'); });
 
     // Auth modal - submit
-    $('#authSubmitBtn').addEventListener('click', submitAuth);
-    $('#authPassword').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') submitAuth();
+    $('#authForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      submitAuth();
     });
 
     // Auth modal - GitHub
@@ -1621,7 +1893,7 @@
     $('#passkeyBtn').addEventListener('click', async function () {
       var btn = this;
       btn.disabled = true;
-      btn.querySelector('span').textContent = '验证中…';
+      btn.querySelector('.auth-provider-copy span').textContent = '验证中…';
 
       // 设置 60 秒超时
       var timeoutId;
@@ -1653,25 +1925,21 @@
         showToast(msg, 'error');
       } finally {
         btn.disabled = false;
-        btn.querySelector('span').textContent = '通行密匙登录';
+        btn.querySelector('.auth-provider-copy span').textContent = '通行密匙登录';
       }
     });
 
     // Auth modal - forgot password / update password
     $('#forgotLink').addEventListener('click', function () { showResetView(); });
-    $('#resetSubmitBtn').addEventListener('click', submitResetPassword);
+    $('#resetForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      submitResetPassword();
+    });
     $('#backToLogin').addEventListener('click', function () { showLoginView(); });
     $('#confirmCloseBtn').addEventListener('click', closeAuthModal);
-    if ($('#updatePasswordBtn')) $('#updatePasswordBtn').addEventListener('click', submitUpdatePassword);
-    
-    if ($('#updatePasswordInput')) {
-      $('#updatePasswordInput').addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') submitUpdatePassword();
-      });
-    }
-
-    $('#resetEmail').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') submitResetPassword();
+    $('#updatePasswordForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      submitUpdatePassword();
     });
 
     // Auth modal - close
@@ -1684,6 +1952,7 @@
       e.stopPropagation();
       var wasOpen = userDropdown.classList.contains('open');
       userDropdown.classList.toggle('open');
+      userAvatarBtn.setAttribute('aria-expanded', wasOpen ? 'false' : 'true');
       if (!wasOpen) {
         updateDropdownVisibility();
       }
@@ -1692,6 +1961,7 @@
     document.addEventListener('click', function (e) {
       if (!userMenu.contains(e.target)) {
         userDropdown.classList.remove('open');
+        userAvatarBtn.setAttribute('aria-expanded', 'false');
       }
     });
 
@@ -1770,6 +2040,9 @@
     // Bookmark modal
     $('#bmCancelBtn').addEventListener('click', closeBookmarkModal);
     $('#bmConfirmBtn').addEventListener('click', confirmBookmark);
+    $('#bmDeleteBtn').addEventListener('click', deleteEditingBookmark);
+    $('#bmMoveUpBtn').addEventListener('click', function () { moveBookmarkByOffset(editingBookmarkId, -1); });
+    $('#bmMoveDownBtn').addEventListener('click', function () { moveBookmarkByOffset(editingBookmarkId, 1); });
     bookmarkModal.addEventListener('click', function (e) {
       if (e.target === bookmarkModal) closeBookmarkModal();
     });
@@ -1787,6 +2060,8 @@
     $('#catCancelBtn').addEventListener('click', closeCategoryModal);
     $('#catConfirmBtn').addEventListener('click', confirmCategory);
     $('#catDeleteBtn').addEventListener('click', deleteCategory);
+    $('#catMoveUpBtn').addEventListener('click', function () { moveCategoryByOffset(editingCategoryId, -1); });
+    $('#catMoveDownBtn').addEventListener('click', function () { moveCategoryByOffset(editingCategoryId, 1); });
     categoryModal.addEventListener('click', function (e) {
       if (e.target === categoryModal) closeCategoryModal();
     });
@@ -1801,15 +2076,36 @@
       if (e.target === confirmModal) closeConfirmModal();
     });
 
-    // Escape to close modals
+    // Modal focus trap + Escape closes only the top-most layer.
     document.addEventListener('keydown', function (e) {
+      var topModal = getTopModal();
+      if (e.key === 'Tab' && topModal) {
+        var focusable = Array.prototype.slice.call(topModal.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )).filter(function (element) {
+          return element.offsetWidth > 0 && element.offsetHeight > 0;
+        });
+        if (focusable.length) {
+          var first = focusable[0];
+          var last = focusable[focusable.length - 1];
+          if (e.shiftKey && (document.activeElement === first || !topModal.contains(document.activeElement))) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && (document.activeElement === last || !topModal.contains(document.activeElement))) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
       if (e.key === 'Escape') {
-        if (confirmModal.classList.contains('active')) closeConfirmModal();
-        if (passkeyModal.classList.contains('active')) closePasskeyModal();
-        if (bookmarkModal.classList.contains('active')) closeBookmarkModal();
-        if (categoryModal.classList.contains('active')) closeCategoryModal();
-        if (authModal.classList.contains('active')) closeAuthModal();
+        if (topModal === confirmModal) closeConfirmModal();
+        else if (topModal === passkeyModal) closePasskeyModal();
+        else if (topModal === bookmarkModal) closeBookmarkModal();
+        else if (topModal === categoryModal) closeCategoryModal();
+        else if (topModal === engineModal) closeEngineModal();
+        else if (topModal === authModal) closeAuthModal();
         userDropdown.classList.remove('open');
+        userAvatarBtn.setAttribute('aria-expanded', 'false');
       }
     });
   }
