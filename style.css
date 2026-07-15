@@ -60,6 +60,8 @@ body {
   display: flex;
   flex-direction: column;
   width: 100%;
+  /* 限制超宽屏下的行长，避免卡片宽到难以扫视。 */
+  max-width: 1440px;
 }
 
 #categoriesContainer {
@@ -1628,10 +1630,10 @@ body {
 body.dark {
   --bg: #0f172a;
   --surface: #1e293b;
-  --surface-hover: #334155;
+  --surface-hover: #273449;
   --border: #334155;
   --border-hover: #475569;
-  --text: #94a3b8;
+  --text: #cbd5e1;
   --text-light: #94a3b8;
   --text-dark: #f1f5f9;
 }

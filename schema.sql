@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS categories (
   name TEXT NOT NULL,
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT categories_name_len CHECK (char_length(name) BETWEEN 1 AND 60)
 );
 
 CREATE INDEX IF NOT EXISTS idx_categories_user_sort ON categories(user_id, sort_order);
@@ -27,7 +28,10 @@ CREATE TABLE IF NOT EXISTS bookmarks (
   description TEXT DEFAULT '',
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT bookmarks_name_len CHECK (char_length(name) BETWEEN 1 AND 120),
+  CONSTRAINT bookmarks_url_len CHECK (char_length(url) BETWEEN 1 AND 2048),
+  CONSTRAINT bookmarks_desc_len CHECK (char_length(coalesce(description, '')) <= 300)
 );
 
 CREATE INDEX IF NOT EXISTS idx_bookmarks_user_category ON bookmarks(user_id, category_id, sort_order);
@@ -42,7 +46,9 @@ CREATE TABLE IF NOT EXISTS search_engines (
   url TEXT NOT NULL,
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT search_engines_name_len CHECK (char_length(name) BETWEEN 1 AND 40),
+  CONSTRAINT search_engines_url_len CHECK (char_length(url) BETWEEN 1 AND 2048)
 );
 
 CREATE INDEX IF NOT EXISTS idx_search_engines_user_sort ON search_engines(user_id, sort_order);

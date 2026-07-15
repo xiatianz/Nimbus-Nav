@@ -93,73 +93,46 @@ var NavDB = (function () {
     return _ref.data;
   }
 
+  // Supabase-js Beta 的通行密匙 API 位于 sb.auth.registerPasskey / signInWithPasskey / passkey.list|update|delete（>= 2.105）。
+  // 下面封装仅针对官方 API，缺失时直接报错提示升级 supabase-js。
+  function passkeyUnavailable(reason) {
+    var err = new Error(reason || '当前 supabase-js 未启用通行密匙，请升级到 >= 2.105 并开启 experimental.passkey');
+    err.code = 'passkey_disabled';
+    return err;
+  }
+
   async function registerPasskey() {
     var sb = getClient();
-    var _ref;
-    if (sb.auth.registerPasskey) {
-      _ref = await sb.auth.registerPasskey();
-    } else if (sb.auth.passkey && sb.auth.passkey.register) {
-      _ref = await sb.auth.passkey.register();
-    } else {
-      throw new Error('当前 Supabase 客户端不支持通行密匙注册');
-    }
-    return dataOrThrow(_ref);
+    if (typeof sb.auth.registerPasskey !== 'function') throw passkeyUnavailable();
+    return dataOrThrow(await sb.auth.registerPasskey());
   }
 
   async function signInWithPasskey() {
     var sb = getClient();
-    var _ref;
-    if (sb.auth.signInWithPasskey) {
-      _ref = await sb.auth.signInWithPasskey();
-    } else if (sb.auth.passkey && sb.auth.passkey.signIn) {
-      _ref = await sb.auth.passkey.signIn();
-    } else {
-      throw new Error('当前 Supabase 客户端不支持通行密匙登录');
-    }
-    return dataOrThrow(_ref);
+    if (typeof sb.auth.signInWithPasskey !== 'function') throw passkeyUnavailable();
+    return dataOrThrow(await sb.auth.signInWithPasskey());
   }
 
   async function listPasskeys() {
     var sb = getClient();
-    var _ref;
-    if (sb.auth.passkey && sb.auth.passkey.list) {
-      _ref = await sb.auth.passkey.list();
-    } else if (sb.auth.listPasskeys) {
-      _ref = await sb.auth.listPasskeys();
-    } else {
-      throw new Error('当前 Supabase 客户端不支持读取通行密匙');
-    }
-    return dataOrThrow(_ref);
+    if (!sb.auth.passkey || typeof sb.auth.passkey.list !== 'function') throw passkeyUnavailable();
+    return dataOrThrow(await sb.auth.passkey.list());
   }
 
   async function deletePasskey(credentialId) {
     var sb = getClient();
-    var _ref;
-    if (sb.auth.passkey && sb.auth.passkey.delete) {
-      _ref = await sb.auth.passkey.delete({ passkeyId: credentialId });
-    } else if (sb.auth.deletePasskey) {
-      _ref = await sb.auth.deletePasskey(credentialId);
-    } else {
-      throw new Error('当前 Supabase 客户端不支持删除通行密匙');
-    }
-    return dataOrThrow(_ref);
+    if (!sb.auth.passkey || typeof sb.auth.passkey.delete !== 'function') throw passkeyUnavailable();
+    return dataOrThrow(await sb.auth.passkey.delete({ passkeyId: credentialId }));
   }
 
   async function updatePasskey(credentialId, data) {
     var sb = getClient();
+    if (!sb.auth.passkey || typeof sb.auth.passkey.update !== 'function') throw passkeyUnavailable();
     var friendlyName = data.friendlyName || data.friendly_name;
-    var _ref;
-    if (sb.auth.passkey && sb.auth.passkey.update) {
-      _ref = await sb.auth.passkey.update({
-        passkeyId: credentialId,
-        friendlyName: friendlyName
-      });
-    } else if (sb.auth.updatePasskey) {
-      _ref = await sb.auth.updatePasskey(credentialId, data);
-    } else {
-      throw new Error('当前 Supabase 客户端不支持修改通行密匙');
-    }
-    return dataOrThrow(_ref);
+    return dataOrThrow(await sb.auth.passkey.update({
+      passkeyId: credentialId,
+      friendlyName: friendlyName
+    }));
   }
 
   async function exchangeCodeForSession(code) {

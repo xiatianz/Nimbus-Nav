@@ -371,23 +371,24 @@
 
   /* ====== Rendering ====== */
 
-  function renderSearchEngines() {
   function moveEngine(sourceId, targetId) {
     var sourceIdx = searchEngines.findIndex(function(e) { return e.id === sourceId; });
     var targetIdx = searchEngines.findIndex(function(e) { return e.id === targetId; });
     if (sourceIdx < 0 || targetIdx < 0) return;
-    var moving = searchEngines.splice(sourceIdx, 1)[0];
-    searchEngines.splice(targetIdx, 0, moving);
-    searchEngines.forEach(function(e, i) {
-      e.sort_order = i;
-      e.updated_at = new Date().toISOString();
-    });
-    NavSync.saveLocal({ searchEngines: searchEngines });
-    NavSync.markDirty();
-    NavSync.requestSync();
-    renderSearchEngines();
+    var reordered = searchEngines.slice();
+    var moving = reordered.splice(sourceIdx, 1)[0];
+    reordered.splice(targetIdx, 0, moving);
+    try {
+      NavSync.reorderSearchEnginesLocal(reordered);
+      searchEngines = NavSync.loadLocal().searchEngines || [];
+      renderSearchEngines();
+    } catch (e) {
+      showToast('搜索引擎排序保存失败', 'error');
+      console.warn('reorderSearchEnginesLocal failed:', e && e.message);
+    }
   }
 
+  function renderSearchEngines() {
     var container = $('#searchEnginesContainer');
     if (!container) return;
     container.innerHTML = '';
@@ -626,9 +627,9 @@
 
     var a = document.createElement('a');
     a.className = 'card' + (options.recent ? ' card-recent' : '');
-    a.href = bm.url;
+    a.href = safeHref(bm.url);
     a.target = openMode === 'current' ? '_self' : '_blank';
-    if (openMode !== 'current') a.rel = 'noopener';
+    if (openMode !== 'current') a.rel = 'noopener noreferrer';
     a.title = bm.name + (bm.description ? ' - ' + bm.description : '');
     a.dataset.bmId = bm.id;
     a.dataset.name = bm.name || '';
@@ -894,11 +895,16 @@
     if (suggestion.type === 'bookmark' && suggestion.bookmark) {
       recordBookmarkVisit(suggestion.bookmark.id);
     }
+    var target = safeHref(suggestion.url);
+    if (target === 'about:blank') {
+      showToast('链接不安全，已阻止打开', 'error');
+      return;
+    }
     if (openMode === 'new') {
-      var opened = window.open(suggestion.url, '_blank', 'noopener,noreferrer');
-      if (opened) opened.opener = null;
+      // noopener 已确保新窗口 window.opener === null，无需额外赋值。
+      window.open(target, '_blank', 'noopener,noreferrer');
     } else {
-      window.location.href = suggestion.url;
+      window.location.href = target;
     }
   }
 
@@ -973,12 +979,14 @@
     if (sourceIndex < 0 || targetIndex < 0) return;
     var moved = sorted.splice(sourceIndex, 1)[0];
     sorted.splice(targetIndex, 0, moved);
-    sorted.forEach(function (cat, index) {
-      cat.sort_order = index;
-      NavSync.updateCategoryLocal(cat.id, { sort_order: index });
-    });
-    categories = sorted;
-    renderAll();
+    try {
+      NavSync.reorderCategoriesLocal(sorted.map(function (c) { return c.id; }));
+      categories = NavSync.loadLocal().categories;
+      renderAll();
+    } catch (e) {
+      showToast('分类排序保存失败', 'error');
+      console.warn('reorderCategoriesLocal failed:', e && e.message);
+    }
   }
 
   function moveBookmark(sourceId, targetId, targetCategoryId) {
@@ -986,10 +994,11 @@
     if (!moving) return;
 
     var sourceCategoryId = moving.category_id;
-    moving.category_id = targetCategoryId || moving.category_id;
+    var destCategoryId = targetCategoryId || moving.category_id;
 
+    // 目标分类内的兄弟（不含被移动项），按当前 sort_order 稳定排序
     var siblings = bookmarks.filter(function (bm) {
-      return bm.category_id === moving.category_id && bm.id !== moving.id;
+      return bm.category_id === destCategoryId && bm.id !== moving.id;
     }).sort(function (a, b) {
       return (a.sort_order || 0) - (b.sort_order || 0);
     });
@@ -998,26 +1007,30 @@
     if (targetIndex < 0) targetIndex = siblings.length;
     siblings.splice(targetIndex, 0, moving);
 
-    siblings.forEach(function (bm, index) {
-      bm.sort_order = index;
-      NavSync.updateBookmarkLocal(bm.id, {
-        category_id: bm.category_id,
-        sort_order: index
-      });
-    });
+    var orderedByCategory = {};
+    orderedByCategory[destCategoryId] = siblings.map(function (bm) { return bm.id; });
 
-    if (sourceCategoryId !== moving.category_id) {
-      bookmarks.filter(function (bm) {
-        return bm.category_id === sourceCategoryId;
+    // 若是跨分类移动，把源分类剩余书签也重新编号并一起提交
+    var catAssignments = null;
+    if (sourceCategoryId !== destCategoryId) {
+      catAssignments = {};
+      catAssignments[moving.id] = destCategoryId;
+      var sourceSiblings = bookmarks.filter(function (bm) {
+        return bm.category_id === sourceCategoryId && bm.id !== moving.id;
       }).sort(function (a, b) {
         return (a.sort_order || 0) - (b.sort_order || 0);
-      }).forEach(function (bm, index) {
-        bm.sort_order = index;
-        NavSync.updateBookmarkLocal(bm.id, { sort_order: index });
       });
+      orderedByCategory[sourceCategoryId] = sourceSiblings.map(function (bm) { return bm.id; });
     }
 
-    renderAll();
+    try {
+      NavSync.reorderBookmarksLocal(orderedByCategory, catAssignments);
+      bookmarks = NavSync.loadLocal().bookmarks;
+      renderAll();
+    } catch (e) {
+      showToast('书签排序保存失败', 'error');
+      console.warn('reorderBookmarksLocal failed:', e && e.message);
+    }
   }
 
   function moveCategoryByOffset(id, delta) {
@@ -1028,13 +1041,15 @@
     var temp = sorted[index];
     sorted[index] = sorted[target];
     sorted[target] = temp;
-    sorted.forEach(function (category, order) {
-      category.sort_order = order;
-      NavSync.updateCategoryLocal(category.id, { sort_order: order });
-    });
-    categories = sorted;
-    renderAll();
-    updateReorderControls();
+    try {
+      NavSync.reorderCategoriesLocal(sorted.map(function (c) { return c.id; }));
+      categories = NavSync.loadLocal().categories;
+      renderAll();
+      updateReorderControls();
+    } catch (e) {
+      showToast('分类排序保存失败', 'error');
+      console.warn('reorderCategoriesLocal failed:', e && e.message);
+    }
   }
 
   function moveBookmarkByOffset(id, delta) {
@@ -1048,12 +1063,17 @@
     var temp = siblings[index];
     siblings[index] = siblings[target];
     siblings[target] = temp;
-    siblings.forEach(function (item, order) {
-      item.sort_order = order;
-      NavSync.updateBookmarkLocal(item.id, { sort_order: order });
-    });
-    renderAll();
-    updateReorderControls();
+    var orderedByCategory = {};
+    orderedByCategory[bookmark.category_id] = siblings.map(function (item) { return item.id; });
+    try {
+      NavSync.reorderBookmarksLocal(orderedByCategory);
+      bookmarks = NavSync.loadLocal().bookmarks;
+      renderAll();
+      updateReorderControls();
+    } catch (e) {
+      showToast('书签排序保存失败', 'error');
+      console.warn('reorderBookmarksLocal failed:', e && e.message);
+    }
   }
 
   function moveEngineByOffset(id, delta) {
@@ -1064,16 +1084,15 @@
     var temp = sorted[index];
     sorted[index] = sorted[target];
     sorted[target] = temp;
-    sorted.forEach(function (engine, order) {
-      engine.sort_order = order;
-      engine.updated_at = new Date().toISOString();
-    });
-    searchEngines = sorted;
-    NavSync.saveLocal({ searchEngines: searchEngines });
-    NavSync.markDirty();
-    NavSync.requestSync();
-    renderSearchEngines();
-    updateReorderControls();
+    try {
+      NavSync.reorderSearchEnginesLocal(sorted);
+      searchEngines = NavSync.loadLocal().searchEngines || [];
+      renderSearchEngines();
+      updateReorderControls();
+    } catch (e) {
+      showToast('搜索引擎排序保存失败', 'error');
+      console.warn('reorderSearchEnginesLocal failed:', e && e.message);
+    }
   }
 
   function updateReorderControls() {
@@ -1161,9 +1180,12 @@
     }
 
     closeEngineModal();
-    NavSync.saveLocal({ searchEngines: searchEngines });
-    NavSync.markDirty();
-    NavSync.requestSync();
+    try {
+      NavSync.saveSearchEnginesLocal(searchEngines);
+    } catch (e) {
+      showToast('搜索引擎保存失败', 'error');
+      console.warn('saveSearchEnginesLocal failed:', e && e.message);
+    }
     renderSearchEngines();
   }
 
@@ -1172,13 +1194,18 @@
     if (!id) return;
 
     showConfirmDialog('确定删除当前搜索引擎？', function () {
-      searchEngines = NavSync.deleteSearchEngineLocal(id);
+      try {
+        searchEngines = NavSync.deleteSearchEngineLocal(id);
+      } catch (e) {
+        showToast('搜索引擎删除失败', 'error');
+        console.warn('deleteSearchEngineLocal failed:', e && e.message);
+        return;
+      }
       if (currentEngine && currentEngine.id === id) {
         currentEngine = searchEngines.length > 0 ? searchEngines[0] : null;
       }
       showToast('引擎已删除');
       closeEngineModal();
-      NavSync.requestSync();
       renderSearchEngines();
     });
   }
@@ -1518,6 +1545,24 @@
 
   function openPasskeyModal() {
     userDropdown.classList.remove('open');
+    // 前置校验：未登录 / 匿名用户 / 未确认邮箱都不能注册通行密匙，
+    // 否则会拿到一个接口错误才提示，体验很差。
+    if (!currentUser) {
+      showToast('请先登录后再管理通行密匙', 'error');
+      return;
+    }
+    if (isAnonymousUser(currentUser)) {
+      showToast('匿名账户不支持通行密匙，请先完成注册', 'error');
+      return;
+    }
+    if (!isEmailConfirmed(currentUser)) {
+      showToast('请先确认邮箱后再添加通行密匙', 'error');
+      return;
+    }
+    if (!window.PublicKeyCredential) {
+      showToast('当前浏览器不支持通行密匙', 'error');
+      return;
+    }
     activateModal(passkeyModal, $('#addPasskeyBtn'));
     loadPasskeyList();
   }
@@ -1610,13 +1655,7 @@
       showToast('通行密匙已添加', 'success');
       loadPasskeyList();
     } catch (e) {
-      var msg = e.message || '通行密匙添加失败';
-      if (msg.indexOf('NotAllowedError') >= 0 || msg.indexOf('cancelled') >= 0) {
-        msg = '通行密匙添加已取消';
-      } else if (msg.indexOf('already registered') >= 0 || msg.indexOf('exists') >= 0) {
-        msg = '该设备已添加通行密匙';
-      }
-      showToast(msg, 'error');
+      showToast(mapPasskeyError(e), 'error');
     } finally {
       btn.disabled = false;
       btn.textContent = '添加通行密匙';
@@ -1624,20 +1663,25 @@
   }
 
   async function renamePasskey(credId, currentName) {
-    var newName = prompt('修改通行密匙名称：', currentName);
-    if (!newName || !newName.trim() || newName.trim() === currentName) return;
+    var newName = await promptInput({
+      title: '修改通行密匙名称',
+      defaultValue: currentName || '',
+      placeholder: '例如：MacBook Touch ID',
+      okText: '保存',
+      required: true
+    });
+    if (!newName || newName === currentName) return;
 
     try {
-      // 尝试使用 updatePasskey API
       if (typeof NavDB.updatePasskey === 'function') {
-        await NavDB.updatePasskey(credId, { friendly_name: newName.trim() });
+        await NavDB.updatePasskey(credId, { friendly_name: newName });
         showToast('名称已更新', 'success');
         loadPasskeyList();
       } else {
         showToast('当前环境不支持修改通行密匙名称', 'error');
       }
     } catch (e) {
-      showToast('修改失败: ' + (e.message || ''), 'error');
+      showToast(mapPasskeyError(e), 'error');
     }
   }
 
@@ -1651,14 +1695,178 @@
         showToast('当前环境不支持删除通行密匙', 'error');
       }
     } catch (e) {
-      showToast('删除失败: ' + (e.message || ''), 'error');
+      showToast(mapPasskeyError(e), 'error');
     }
   }
 
   function escapeHtml(str) {
-    var div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+    // 同时可安全用于文本与属性上下文（实际上属性已处理引号 & 单引号）。
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function safeHref(url) {
+    var value = String(url == null ? '' : url).trim();
+    if (!value) return 'about:blank';
+    // 仅允许 http/https，mailto/tel/ftp，支持相对 URL。封杀 javascript:/data:/vbscript: 等。
+    if (/^\s*(javascript|data|vbscript|file):/i.test(value)) return 'about:blank';
+    try {
+      var parsed = new URL(value, window.location.origin);
+      var proto = parsed.protocol.replace(':', '').toLowerCase();
+      if (proto === 'http' || proto === 'https' || proto === 'mailto' || proto === 'tel' || proto === 'ftp') {
+        return parsed.href;
+      }
+      return 'about:blank';
+    } catch (e) {
+      // 不是合法 URL，尝试当成相对路径，实在不行丢弃。
+      return 'about:blank';
+    }
+  }
+
+  // Passkey 服务器错误码 / 浏览器错误名 → 中文提示映射。
+  var PASSKEY_ERROR_MESSAGES = {
+    passkey_disabled: '项目未启用通行密匙，请联系管理员',
+    too_many_passkeys: '通行密匙数量已达上限',
+    webauthn_credential_exists: '该设备已经注册过通行密匙',
+    webauthn_credential_not_found: '本设备没有可用的通行密匙，请先注册',
+    webauthn_challenge_not_found: '验证会话已失效，请重试',
+    webauthn_challenge_expired: '验证超时，请重试',
+    webauthn_verification_failed: '通行密匙验证失败，请重试',
+    email_not_confirmed: '请先确认邮箱后再使用通行密匙',
+    phone_not_confirmed: '请先确认手机号后再使用通行密匙',
+    user_banned: '账号已被禁用'
+  };
+
+  function mapPasskeyError(e) {
+    if (!e) return '通行密匙操作失败';
+    var code = e.code || (e.error && e.error.code) || '';
+    if (code && PASSKEY_ERROR_MESSAGES[code]) return PASSKEY_ERROR_MESSAGES[code];
+    var msg = e.message || String(e);
+    // 服务器错误码关键字匹配（supabase-js Beta 有时把 code 拼到 message 里）
+    var codes = Object.keys(PASSKEY_ERROR_MESSAGES);
+    for (var i = 0; i < codes.length; i++) {
+      if (msg.indexOf(codes[i]) >= 0) return PASSKEY_ERROR_MESSAGES[codes[i]];
+    }
+    // 常见的浏览器 WebAuthn 错误
+    if (msg.indexOf('NotAllowedError') >= 0 || msg.indexOf('cancelled') >= 0 || msg.indexOf('user canceled') >= 0) {
+      return '通行密匙操作已取消';
+    }
+    if (msg.indexOf('TimeoutError') >= 0) return '验证超时，请重试';
+    if (msg.indexOf('SecurityError') >= 0) return '当前域名不允许使用通行密匙，请使用 HTTPS 或检查域名配置';
+    if (msg.indexOf('InvalidStateError') >= 0) return '设备上已存在相同的通行密匙';
+    if (msg.indexOf('not supported') >= 0 || msg.indexOf('WebAuthn') >= 0) return '当前浏览器或环境不支持通行密匙';
+    return msg || '通行密匙操作失败';
+  }
+
+  function isEmailConfirmed(user) {
+    if (!user) return false;
+    // Supabase v2 user 同时提供 email_confirmed_at（新）与 confirmed_at（旧）
+    return !!(user.email_confirmed_at || user.confirmed_at);
+  }
+
+  function isAnonymousUser(user) {
+    return !!(user && (user.is_anonymous || (user.app_metadata && user.app_metadata.provider === 'anonymous')));
+  }
+
+  // 基于现有 confirm modal 样式的轻量 prompt，避免在 iOS PWA 下丢失的原生 prompt()。
+  function promptInput(options) {
+    options = options || {};
+    return new Promise(function (resolve) {
+      var overlay = document.createElement('div');
+      overlay.className = 'modal-overlay active';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.style.zIndex = '2000';
+
+      var modal = document.createElement('div');
+      modal.className = 'modal modal-sm';
+
+      var titleEl = document.createElement('h3');
+      titleEl.className = 'modal-title';
+      titleEl.textContent = options.title || '输入';
+      modal.appendChild(titleEl);
+
+      if (options.message) {
+        var hint = document.createElement('p');
+        hint.className = 'auth-hint';
+        hint.textContent = options.message;
+        modal.appendChild(hint);
+      }
+
+      var group = document.createElement('div');
+      group.className = 'form-group';
+      var input = document.createElement('input');
+      input.type = options.type || 'text';
+      input.className = 'form-input';
+      input.value = options.defaultValue || '';
+      if (options.placeholder) input.placeholder = options.placeholder;
+      if (options.autocomplete) input.setAttribute('autocomplete', options.autocomplete);
+      if (options.inputmode) input.setAttribute('inputmode', options.inputmode);
+      group.appendChild(input);
+
+      var error = document.createElement('p');
+      error.className = 'auth-hint';
+      error.style.color = 'var(--danger)';
+      error.style.marginTop = '6px';
+      error.style.minHeight = '18px';
+      error.textContent = '';
+      group.appendChild(error);
+      modal.appendChild(group);
+
+      var actions = document.createElement('div');
+      actions.className = 'modal-actions';
+      var cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'btn btn-cancel';
+      cancelBtn.textContent = options.cancelText || '取消';
+      var okBtn = document.createElement('button');
+      okBtn.type = 'button';
+      okBtn.className = 'btn btn-confirm';
+      okBtn.textContent = options.okText || '确定';
+      actions.appendChild(cancelBtn);
+      actions.appendChild(okBtn);
+      modal.appendChild(actions);
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+      document.body.classList.add('modal-open');
+      var page = $('.container');
+      var previousInert = page ? page.inert : false;
+      if (page) page.inert = true;
+      setTimeout(function () { input.focus(); input.select(); }, 0);
+
+      function close(result) {
+        overlay.remove();
+        if (page) page.inert = previousInert;
+        if (getActiveModals().length === 0) document.body.classList.remove('modal-open');
+        resolve(result);
+      }
+
+      function submit() {
+        var value = input.value;
+        if (options.trim !== false) value = value.trim();
+        if (options.validate) {
+          var err = options.validate(value);
+          if (err) { error.textContent = err; input.focus(); return; }
+        } else if (options.required && !value) {
+          error.textContent = '不能为空';
+          input.focus();
+          return;
+        }
+        close(value);
+      }
+
+      okBtn.addEventListener('click', submit);
+      cancelBtn.addEventListener('click', function () { close(null); });
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) close(null); });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); submit(); }
+        if (e.key === 'Escape') { e.preventDefault(); close(null); }
+      });
+    });
   }
 
   /* ====== Theme ====== */
@@ -1711,6 +1919,28 @@
     navigator.serviceWorker.register('./sw.js').catch(function (error) {
       console.warn('离线服务注册失败:', error.message);
     });
+  }
+
+  // 恢复网络时主动重同步：补提墓碑 + 推本地待同步变更。
+  // 使用一个简单的防抖避免 online 事件瞬时拖发。
+  var onlineResyncTimer = null;
+  function handleOnlineResync() {
+    if (!currentUser || !NavDB.isLoggedIn()) return;
+    if (onlineResyncTimer) clearTimeout(onlineResyncTimer);
+    onlineResyncTimer = setTimeout(function () {
+      onlineResyncTimer = null;
+      syncDot.className = 'sync-dot syncing';
+      NavSync.syncOnLogin().then(function (data) {
+        categories = data.categories;
+        bookmarks = data.bookmarks;
+        searchEngines = data.searchEngines || searchEngines || [];
+        renderAll();
+        syncDot.className = 'sync-dot';
+      }).catch(function (e) {
+        console.warn('online 重同步失败:', e && e.message);
+        syncDot.className = 'sync-dot error';
+      });
+    }, 600);
   }
 
   /* ====== Clock ====== */
@@ -1915,17 +2145,7 @@
         showToast('通行密匙登录成功', 'success');
       } catch (e) {
         clearTimeout(timeoutId);
-        var msg = e.message || '通行密匙登录失败';
-        if (msg.indexOf('NotAllowedError') >= 0 || msg.indexOf('cancelled') >= 0) {
-          msg = '通行密匙验证已取消';
-        } else if (msg.indexOf('TimeoutError') >= 0) {
-          msg = '验证超时。没有通行密匙时，请先创建账号并在头像菜单中添加。';
-        } else if (msg.indexOf('not supported') >= 0 || msg.indexOf('WebAuthn') >= 0) {
-          msg = '当前浏览器或环境不支持通行密匙';
-        } else if (msg.indexOf('InvalidStateError') >= 0 || msg.indexOf('credential') >= 0 || msg.indexOf('not_found') >= 0) {
-          msg = '还没有可用通行密匙。请先创建账号，登录后在头像菜单中添加通行密匙。';
-        }
-        showToast(msg, 'error');
+        showToast(mapPasskeyError(e), 'error');
       } finally {
         btn.disabled = false;
         btn.querySelector('.auth-provider-copy span').textContent = '通行密匙登录';
@@ -2007,22 +2227,41 @@
         return;
       }
 
-      // GitHub 用户绑定邮箱 + 设置密码
-      var newEmail = prompt('请输入要绑定的邮箱地址：');
-      if (!newEmail || !newEmail.trim()) return;
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) {
-        showToast('邮箱格式不正确', 'error');
-        return;
-      }
+      // GitHub 用户绑定邮箱 + 设置密码，使用 modal 而非原生 prompt 以兼容 iOS PWA。
+      var newEmail = await promptInput({
+        title: '绑定邮箱',
+        message: '输入要绑定到当前账号的邮箱',
+        type: 'email',
+        placeholder: 'you@example.com',
+        inputmode: 'email',
+        autocomplete: 'email',
+        okText: '下一步',
+        required: true,
+        validate: function (value) {
+          if (!value) return '邮箱不能为空';
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return '邮箱格式不正确';
+          return null;
+        }
+      });
+      if (!newEmail) return;
 
-      var newPassword = prompt('设置登录密码（至少 6 位，用于邮箱登录）：');
-      if (!newPassword || newPassword.length < 6) {
-        if (newPassword) showToast('密码至少 6 位', 'error');
-        return;
-      }
+      var newPassword = await promptInput({
+        title: '设置登录密码',
+        message: '至少 6 位，将用于以后的邮箱登录',
+        type: 'password',
+        autocomplete: 'new-password',
+        okText: '确认绑定',
+        trim: false,
+        required: true,
+        validate: function (value) {
+          if (!value || value.length < 6) return '密码至少 6 位';
+          return null;
+        }
+      });
+      if (!newPassword) return;
 
       try {
-        await NavDB.updateUser({ email: newEmail.trim(), password: newPassword });
+        await NavDB.updateUser({ email: newEmail, password: newPassword });
         showToast('邮箱绑定成功，今后可用邮箱+密码登录', 'success');
       } catch (e) {
         var msg = e.message || '绑定失败';
@@ -2030,6 +2269,10 @@
         showToast(msg, 'error');
       }
     });
+
+    // 网络恢复时重同步。尤其重要：墓碑 flush 需要联网，离线时失败的删除
+    // 依靠 online 事件才能真正同步到云。
+    window.addEventListener('online', handleOnlineResync);
 
     logoutBtn.addEventListener('click', async function () {
       userDropdown.classList.remove('open');

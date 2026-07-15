@@ -12,6 +12,9 @@ var NavSync = (function () {
   var STORAGE_VERSION_KEY = 'nav_storage_v2_migrated';
   var GUEST_OWNER = 'guest';
   var currentOwner = GUEST_OWNER;
+  // 墓碑保留时长（毫秒）。云端删除已成功且超过该阈值的墓碑将从本地丢弃，
+  // 避免每次登录都重放所有历史删除。
+  var TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
   function ownerKey(owner, suffix) {
     return 'nav_data_' + encodeURIComponent(owner || GUEST_OWNER) + '_' + suffix;
@@ -153,16 +156,30 @@ var NavSync = (function () {
     setDirty(true);
   }
 
-  function loadDeleted(key) {
+  function loadDeleted(storageKey) {
     try {
-      return JSON.parse(localStorage.getItem(key) || '{}') || {};
+      var raw = JSON.parse(localStorage.getItem(storageKey) || '{}') || {};
+      // 顺带清理过期的墓碑，避免无限膨胀。
+      var now = Date.now();
+      var pruned = {};
+      var changed = false;
+      Object.keys(raw).forEach(function (id) {
+        var ts = new Date(raw[id] || 0).getTime();
+        if (!ts || (now - ts) < TOMBSTONE_TTL_MS) {
+          pruned[id] = raw[id];
+        } else {
+          changed = true;
+        }
+      });
+      if (changed) localStorage.setItem(storageKey, JSON.stringify(pruned));
+      return pruned;
     } catch (e) {
       return {};
     }
   }
 
-  function saveDeleted(key, value) {
-    localStorage.setItem(key, JSON.stringify(value || {}));
+  function saveDeleted(storageKey, value) {
+    localStorage.setItem(storageKey, JSON.stringify(value || {}));
   }
 
   function markDeleted(storageKey, id) {
@@ -170,6 +187,15 @@ var NavSync = (function () {
     var deleted = loadDeleted(storageKey);
     deleted[id] = new Date().toISOString();
     saveDeleted(storageKey, deleted);
+  }
+
+  function clearTombstone(storageKey, id) {
+    if (!id) return;
+    var deleted = loadDeleted(storageKey);
+    if (deleted[id]) {
+      delete deleted[id];
+      saveDeleted(storageKey, deleted);
+    }
   }
 
   function filterDeleted(data) {
@@ -190,20 +216,24 @@ var NavSync = (function () {
   }
 
   async function flushPendingDeletes(remoteData) {
-    var deletedCats = loadDeleted(key('deleted_categories'));
-    var deletedBms = loadDeleted(key('deleted_bookmarks'));
-    var deletedEngines = loadDeleted(key('deleted_search_engines'));
+    var bmKey = key('deleted_bookmarks');
+    var catKey = key('deleted_categories');
+    var engineKey = key('deleted_search_engines');
+    var deletedCats = loadDeleted(catKey);
+    var deletedBms = loadDeleted(bmKey);
+    var deletedEngines = loadDeleted(engineKey);
     var filteredRemote = filterDeleted(remoteData);
 
     if (!NavDB.isLoggedIn()) return filteredRemote;
 
+    // 云端删除成功后立即清理墓碑，避免每次登录都重放所有历史删除。
+    // 仅在请求失败（网络问题、5xx 等）时保留墓碑等待下次同步补偿；过期墓碑
+    // 由 loadDeleted 的 TTL 自动兜底清理。
     var bmIds = Object.keys(deletedBms);
     for (var i = 0; i < bmIds.length; i++) {
       try {
-        // 尝试推送到云端删除
         await NavDB.deleteBookmark(bmIds[i]);
-        // 注意：我们不再从 deletedBms 中删除该墓碑标记，
-        // 永远保留墓碑，防止由于云端竞态条件导致幽灵数据复活。
+        delete deletedBms[bmIds[i]];
       } catch (e) {
         console.warn('云端删除书签请求失败:', e.message);
       }
@@ -213,6 +243,7 @@ var NavSync = (function () {
     for (var j = 0; j < catIds.length; j++) {
       try {
         await NavDB.deleteCategory(catIds[j]);
+        delete deletedCats[catIds[j]];
       } catch (e2) {
         console.warn('云端删除分类请求失败:', e2.message);
       }
@@ -222,15 +253,15 @@ var NavSync = (function () {
     for (var k = 0; k < engineIds.length; k++) {
       try {
         await NavDB.deleteSearchEngine(engineIds[k]);
+        delete deletedEngines[engineIds[k]];
       } catch (e3) {
         console.warn('云端删除搜索引擎请求失败:', e3.message);
       }
     }
 
-    // 重新保存墓碑，确保持续生效
-    saveDeleted(key('deleted_bookmarks'), deletedBms);
-    saveDeleted(key('deleted_categories'), deletedCats);
-    saveDeleted(key('deleted_search_engines'), deletedEngines);
+    saveDeleted(bmKey, deletedBms);
+    saveDeleted(catKey, deletedCats);
+    saveDeleted(engineKey, deletedEngines);
     return filteredRemote;
   }
 
@@ -469,7 +500,8 @@ var NavSync = (function () {
       if (local && remote) {
         var lt = new Date(local.updated_at || 0).getTime();
         var rt = new Date(remote.updated_at || 0).getTime();
-        mergedEngines.push(lt >= rt ? local : remote);
+        // 与 categories / bookmarks 保持一致：远端更新时间不早于本地时以远端为准。
+        mergedEngines.push(rt >= lt ? remote : local);
       } else {
         mergedEngines.push(local || remote);
       }
@@ -641,6 +673,107 @@ var NavSync = (function () {
     return data.searchEngines;
   }
 
+  /* ---- 批量重排 API（避免拖拽时 N 次 upsert）---- */
+
+  // 把传入的数组按新顺序写回本地 sort_order，并批量推云。仅推发生实际
+  // 变化的条目，尽量减少无意义的 upsert。
+  function reorderCategoriesLocal(orderedIds) {
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) return;
+    var data = loadLocal();
+    var byId = {};
+    data.categories.forEach(function (c) { byId[c.id] = c; });
+    var now = new Date().toISOString();
+    var changed = [];
+    orderedIds.forEach(function (id, index) {
+      var cat = byId[id];
+      if (!cat) return;
+      if (cat.sort_order !== index) {
+        cat.sort_order = index;
+        cat.updated_at = now;
+        cat._default = false;
+        changed.push(cat);
+      }
+    });
+    if (changed.length === 0) return;
+    saveLocal(data);
+    markDirty();
+    if (NavDB.isLoggedIn()) {
+      NavDB.upsertCategories(changed).catch(function (e) {
+        console.warn('云端批量同步分类失败:', e.message);
+      });
+    }
+  }
+
+  // orderedByCategory: { catId: [按新顺序排好的书签 ID 数组] }
+  // catAssignments 可选：{ bmId: newCategoryId } 用于跨分类移动。
+  function reorderBookmarksLocal(orderedByCategory, catAssignments) {
+    if (!orderedByCategory) return;
+    var data = loadLocal();
+    var byId = {};
+    data.bookmarks.forEach(function (b) { byId[b.id] = b; });
+    var now = new Date().toISOString();
+    var changed = [];
+    Object.keys(orderedByCategory).forEach(function (catId) {
+      (orderedByCategory[catId] || []).forEach(function (bmId, index) {
+        var bm = byId[bmId];
+        if (!bm) return;
+        var newCatId = catAssignments && catAssignments[bmId] ? catAssignments[bmId] : catId;
+        var moved = false;
+        if (bm.category_id !== newCatId) { bm.category_id = newCatId; moved = true; }
+        if (bm.sort_order !== index) { bm.sort_order = index; moved = true; }
+        if (moved) {
+          bm.updated_at = now;
+          bm._default = false;
+          changed.push(bm);
+        }
+      });
+    });
+    if (changed.length === 0) return;
+    saveLocal(data);
+    markDirty();
+    if (NavDB.isLoggedIn()) {
+      NavDB.upsertBookmarks(changed).catch(function (e) {
+        console.warn('云端批量同步书签失败:', e.message);
+      });
+    }
+  }
+
+  // 搜索引擎没有分类概念，传入已按新顺序排好的引擎数组即可。
+  function reorderSearchEnginesLocal(orderedEngines) {
+    if (!Array.isArray(orderedEngines) || orderedEngines.length === 0) return;
+    var data = loadLocal();
+    var now = new Date().toISOString();
+    var changed = [];
+    orderedEngines.forEach(function (engine, index) {
+      if (!engine || !engine.id) return;
+      if (engine.sort_order !== index) {
+        engine.sort_order = index;
+        engine.updated_at = now;
+        changed.push(engine);
+      }
+    });
+    data.searchEngines = orderedEngines.slice();
+    saveLocal(data);
+    markDirty();
+    if (changed.length > 0 && NavDB.isLoggedIn() && NavDB.upsertSearchEngines) {
+      NavDB.upsertSearchEngines(changed).catch(function (e) {
+        console.warn('云端批量同步搜索引擎失败:', e.message);
+      });
+    }
+  }
+
+  // 完整同步一次本地搜索引擎数组（新增 / 编辑 / 删除后使用）。
+  function saveSearchEnginesLocal(engines) {
+    if (!Array.isArray(engines)) return;
+    saveLocal({ searchEngines: engines });
+    markDirty();
+    if (NavDB.isLoggedIn() && NavDB.upsertSearchEngines) {
+      NavDB.upsertSearchEngines(engines).catch(function (e) {
+        console.warn('云端同步搜索引擎失败:', e.message);
+      });
+    }
+  }
+
   /* ---- 异步推送（静默失败，下次同步时补偿） ---- */
 
   function pushCategoryAsync(cat) {
@@ -713,6 +846,10 @@ var NavSync = (function () {
     updateBookmarkLocal: updateBookmarkLocal,
     deleteBookmarkLocal: deleteBookmarkLocal,
     deleteSearchEngineLocal: deleteSearchEngineLocal,
+    reorderCategoriesLocal: reorderCategoriesLocal,
+    reorderBookmarksLocal: reorderBookmarksLocal,
+    reorderSearchEnginesLocal: reorderSearchEnginesLocal,
+    saveSearchEnginesLocal: saveSearchEnginesLocal,
     resetMergeState: resetMergeState,
     requestSync: requestSync,
     uuid: uuid
