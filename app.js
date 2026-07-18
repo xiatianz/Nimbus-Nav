@@ -467,6 +467,7 @@
     userDropdown.classList.remove('open');
     userAvatar.removeAttribute('src');
     NavSync.setOwner(null);
+    // 只初始化 guest 默认数据（如果从未初始化过），不覆盖已有书签
     NavSync.initDefaultData();
     var local = NavSync.loadLocal();
     categories = local.categories;

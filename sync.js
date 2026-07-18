@@ -59,7 +59,7 @@ var NavSync = (function () {
     [
       'categories', 'bookmarks', 'search_engines', 'sync_time', 'merged',
       'deleted_categories', 'deleted_bookmarks', 'deleted_search_engines',
-      'initialized', 'dirty'
+      'dirty'
     ].forEach(function (suffix) {
       localStorage.removeItem(ownerKey(owner, suffix));
     });
