@@ -34,7 +34,7 @@
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return document.querySelectorAll(sel); };
 
-  var searchInput, searchBtn, searchSuggestionsEl, engineTags;
+  var searchInput, searchBtn, searchClearBtn, searchSuggestionsEl, engineTags;
   var categoriesContainer;
   var loginBtn, authModal, authFormView, resetView, confirmView;
   var openModeBtn;
@@ -158,6 +158,7 @@
   function cacheDom() {
     searchInput = $('#searchInput');
     searchBtn = $('#searchBtn');
+    searchClearBtn = $('#searchClearBtn');
     searchSuggestionsEl = $('#searchSuggestions');
     engineTags = $$('.engine-tag');
     categoriesContainer = $('#categoriesContainer');
@@ -899,6 +900,7 @@
 
   var searchDebounceTimer = null;
   function updateSearchSuggestions() {
+    if (searchClearBtn) searchClearBtn.hidden = !searchInput.value;
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(function () {
       var query = searchInput.value.trim();
@@ -907,6 +909,19 @@
       applyCardSearchState(query);
       renderSearchSuggestions();
     }, 150);
+  }
+
+  function clearSearchInput() {
+    searchInput.value = '';
+    if (searchClearBtn) searchClearBtn.hidden = true;
+    searchSuggestions = [];
+    selectedSuggestionIndex = -1;
+    searchSuggestionsEl.innerHTML = '';
+    searchSuggestionsEl.hidden = true;
+    searchInput.setAttribute('aria-expanded', 'false');
+    searchInput.setAttribute('aria-activedescendant', '');
+    applyCardSearchState('');
+    searchInput.focus();
   }
 
   function renderSearchSuggestions() {
@@ -2175,6 +2190,7 @@
 
     // Search
     searchBtn.addEventListener('click', performSearch);
+    if (searchClearBtn) searchClearBtn.addEventListener('click', clearSearchInput);
     searchInput.addEventListener('input', updateSearchSuggestions);
     searchInput.addEventListener('focus', updateSearchSuggestions);
     searchInput.addEventListener('keydown', function (e) {
