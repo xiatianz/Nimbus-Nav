@@ -886,8 +886,8 @@ body {
 /* ====== Card Grid ====== */
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 12px;
 }
 
 /* ====== Cards ====== */
@@ -905,64 +905,67 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  min-height: 116px;
-  padding: 14px 10px 12px;
-  border-radius: var(--radius-sm);
+  gap: 8px;
+  min-height: 124px;
+  padding: 16px 10px 14px;
+  border-radius: 16px;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   text-decoration: none;
   color: inherit;
-  transition: opacity 0.15s ease, transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  transition: opacity 0.15s ease, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.15s ease, box-shadow 0.2s ease, background 0.15s ease;
   cursor: pointer;
   position: relative;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .card:hover {
   border-color: var(--border-hover);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
-  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.04);
+  transform: translateY(-3px);
 }
 
 .card:active {
-  transform: translateY(0);
-  box-shadow: none;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
 }
 
 .card-icon {
-  width: 38px;
-  height: 38px;
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-sm);
-  background: linear-gradient(180deg, var(--surface-hover), var(--bg));
-  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: transparent;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .card-icon img {
-  width: 22px;
-  height: 22px;
+  width: 32px;
+  height: 32px;
   object-fit: contain;
   display: block;
 }
 
 .card-icon-fallback {
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   font-weight: 700;
   color: #fff;
-  background: var(--primary);
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
   width: 100%;
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   text-transform: uppercase;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
 }
 
 .card-icon.emoji {
-  font-size: 1.12rem;
+  font-size: 1.4rem;
   color: var(--primary);
 }
 
@@ -992,7 +995,7 @@ body {
 }
 
 .card-recent {
-  min-height: 106px;
+  min-height: 114px;
 }
 
 .card-search-dim {
@@ -1001,7 +1004,7 @@ body {
 
 .card-search-match {
   border-color: rgba(59, 130, 246, 0.42);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08), 0 12px 24px rgba(15, 23, 42, 0.08);
 }
 
 .card-shell.dragging,
@@ -1066,12 +1069,13 @@ body {
   opacity: 0.4;
   min-height: auto;
   font-family: inherit;
+  border-radius: 16px;
 }
 
 .category-empty {
-  min-height: 116px;
+  min-height: 124px;
   border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1607,8 +1611,8 @@ body {
   }
 
   /* -- Add card -- */
-  .card-add { min-height: 96px; }
-  .category-empty { min-height: 96px; }
+  .card-add { min-height: 104px; }
+  .category-empty { min-height: 104px; }
   .add-category-btn { font-size: 0.75rem; padding: 7px 14px; min-height: 44px; }
 }
 
@@ -1618,9 +1622,9 @@ body {
     grid-template-columns: repeat(3, 1fr);
     gap: 6px;
   }
-  .card { padding: 10px 4px 8px; min-height: 88px; }
-  .card-icon { width: 28px; height: 28px; }
-  .card-icon img { width: 18px; height: 18px; }
+  .card { padding: 12px 4px 10px; min-height: 96px; }
+  .card-icon { width: 36px; height: 36px; }
+  .card-icon img { width: 24px; height: 24px; }
   .card-title { font-size: 0.68rem; }
   .card-desc { display: none; }
   .logo { font-size: 1.05rem; }
@@ -1650,6 +1654,18 @@ body.dark {
 body.dark .card-action-btn.danger:hover {
   color: var(--danger);
   border-color: var(--danger);
+}
+
+body.dark .card {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+body.dark .card:hover {
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+body.dark .card-icon-fallback {
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
 }
 
 body.dark .dropdown-item:hover {
