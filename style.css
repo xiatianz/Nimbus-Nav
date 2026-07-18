@@ -1203,7 +1203,7 @@ body {
 }
 
 .footer-tagline {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   color: var(--text-light);
 }
 
@@ -1211,6 +1211,7 @@ body {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .footer-feature {
@@ -1220,6 +1221,12 @@ body {
   font-size: 0.75rem;
   color: var(--text-light);
   white-space: nowrap;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.footer-feature:hover {
+  color: var(--primary);
 }
 
 .footer-feature svg {
@@ -1227,27 +1234,7 @@ body {
   opacity: 0.8;
 }
 
-.footer-bottom {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 20px;
-  padding: 12px 0;
-  font-size: 0.72rem;
-  color: var(--text-light);
-  border-top: 1px solid var(--border);
-}
-
-.footer-link {
-  color: var(--text-light);
-  text-decoration: none;
-  font-weight: 500;
-  transition: color 0.15s;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-}
-
+.footer-link { color: var(--text-light); text-decoration: none; }
 .footer-link:hover { color: var(--primary); }
 
 /* ====== Modal ====== */

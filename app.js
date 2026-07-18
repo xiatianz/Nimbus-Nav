@@ -2068,8 +2068,8 @@
     clockEl.style.fontSize = '0.72rem';
     clockEl.style.color = 'var(--text-light)';
     clockEl.setAttribute('aria-hidden', 'true');
-    var footerBottom = $('.footer-bottom');
-    footerBottom.insertBefore(clockEl, footerBottom.firstChild);
+    var footerTop = $('.footer-top');
+    if (footerTop) footerTop.appendChild(clockEl);
 
     function tick() {
       var now = new Date();
