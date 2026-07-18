@@ -27,6 +27,7 @@
   var LS_VISIT_STATS = 'nav_visit_stats';
   var LS_OPEN_MODE = 'nav_open_mode';
   var LS_FAVICON_CACHE = 'nav_favicon_cache_v3';
+  var LS_USER_CACHE = 'nav_user_cache';
   var FAVICON_SUCCESS_TTL = 7 * 24 * 60 * 60 * 1000;
   var FAVICON_FAILURE_TTL = 0;
 
@@ -52,6 +53,24 @@
   async function init() {
     cacheDom();
     bindEvents();
+
+    // 从缓存立即恢复用户 UI，避免刷新时登录按钮→头像的闪烁
+    var cachedUser = loadUserCache();
+    if (cachedUser) {
+      loginBtn.style.display = 'none';
+      userMenu.style.display = '';
+      if (cachedUser.avatarUrl) {
+        userAvatar.src = cachedUser.avatarUrl;
+      } else if (cachedUser.initial) {
+        var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36">'
+          + '<rect width="36" height="36" rx="18" fill="#2563eb"/>'
+          + '<text x="18" y="24" text-anchor="middle" fill="#fff" font-size="16" font-weight="600" font-family="sans-serif">' + cachedUser.initial + '</text>'
+          + '</svg>';
+        userAvatar.src = 'data:image/svg+xml,' + encodeURIComponent(svg);
+      }
+      userName.textContent = cachedUser.name || '用户';
+    }
+
     faviconCache = loadFaviconCache();
     faviconLoader = NavBookmarks.createFaviconLoader
       ? NavBookmarks.createFaviconLoader({
@@ -374,19 +393,27 @@
 
     var metadata = user.user_metadata || {};
     var avatarUrl = metadata.avatar_url;
+    var displayName = metadata.preferred_username || metadata.name || user.email || '用户';
+    var initial = displayName.charAt(0).toUpperCase();
+
     if (avatarUrl) {
       userAvatar.src = avatarUrl;
       userAvatar.style.display = '';
     } else {
-      var name = metadata.preferred_username || metadata.name || user.email || 'U';
-      var initial = name.charAt(0).toUpperCase();
       var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36">'
-        + '<rect width="36" height="36" rx="18" fill="#3b82f6"/>'
+        + '<rect width="36" height="36" rx="18" fill="#2563eb"/>'
         + '<text x="18" y="24" text-anchor="middle" fill="#fff" font-size="16" font-weight="600" font-family="sans-serif">' + initial + '</text>'
         + '</svg>';
       userAvatar.src = 'data:image/svg+xml,' + encodeURIComponent(svg);
     }
-    userName.textContent = metadata.preferred_username || metadata.name || user.email || '用户';
+    userName.textContent = displayName;
+
+    // 缓存用户信息到 localStorage，下次刷新直接显示避免闪烁
+    saveUserCache({
+      avatarUrl: avatarUrl || null,
+      initial: avatarUrl ? null : initial,
+      name: displayName
+    });
 
     try {
       var data = await NavSync.syncOnLogin();
@@ -414,10 +441,27 @@
     }
   }
 
+  function loadUserCache() {
+    try {
+      return JSON.parse(localStorage.getItem(LS_USER_CACHE) || 'null');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function saveUserCache(info) {
+    try {
+      localStorage.setItem(LS_USER_CACHE, JSON.stringify(info));
+    } catch (e) {
+      // ignore quota
+    }
+  }
+
   function handleLoggedOut() {
     NavSync.resetMergeState();
     currentUser = null;
     localStorage.removeItem('nav_last_user_id');
+    localStorage.removeItem(LS_USER_CACHE);
     loginBtn.style.display = '';
     userMenu.style.display = 'none';
     userDropdown.classList.remove('open');
