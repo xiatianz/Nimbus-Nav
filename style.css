@@ -939,6 +939,7 @@ body {
   background: linear-gradient(180deg, var(--surface-hover), var(--bg));
   border: 1px solid var(--border);
   overflow: hidden;
+  position: relative;
 }
 
 .card-icon img {
@@ -946,9 +947,13 @@ body {
   height: 22px;
   object-fit: contain;
   display: block;
+  transition: opacity 0.2s ease;
 }
 
 .card-icon-fallback {
+  position: absolute;
+  top: 0;
+  left: 0;
   font-size: 1.15rem;
   font-weight: 700;
   color: #fff;
@@ -959,6 +964,7 @@ body {
   align-items: center;
   justify-content: center;
   text-transform: uppercase;
+  transition: opacity 0.2s ease;
 }
 
 .card-icon.emoji {

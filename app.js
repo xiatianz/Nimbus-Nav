@@ -21,10 +21,12 @@
   var draggedCategoryId = null;
   var faviconLoader = null;
   var faviconCache = {};
+  var faviconBlobCache = {};
+  var faviconBlobUrls = [];
 
   var LS_VISIT_STATS = 'nav_visit_stats';
   var LS_OPEN_MODE = 'nav_open_mode';
-  var LS_FAVICON_CACHE = 'nav_favicon_cache_v2';
+  var LS_FAVICON_CACHE = 'nav_favicon_cache_v3';
   var FAVICON_SUCCESS_TTL = 7 * 24 * 60 * 60 * 1000;
   var FAVICON_FAILURE_TTL = 0;
 
@@ -74,6 +76,12 @@
     initTheme();
     initClock();
     registerServiceWorker();
+
+    window.addEventListener('pagehide', function () {
+      faviconBlobUrls.forEach(function (u) { URL.revokeObjectURL(u); });
+      faviconBlobUrls = [];
+      faviconBlobCache = {};
+    });
 
     // 初始化 Supabase
     if (typeof supabase === 'undefined') {
@@ -252,7 +260,16 @@
 
   function loadFaviconCache() {
     try {
-      return JSON.parse(localStorage.getItem(LS_FAVICON_CACHE) || '{}') || {};
+      var raw = JSON.parse(localStorage.getItem(LS_FAVICON_CACHE) || '{}') || {};
+      var cache = {};
+      Object.keys(raw).forEach(function (k) {
+        var entry = raw[k];
+        if (!entry || !entry.savedAt) return;
+        var ttl = entry.ok ? FAVICON_SUCCESS_TTL : FAVICON_FAILURE_TTL;
+        if (Date.now() - entry.savedAt > ttl) return;
+        cache[k] = entry;
+      });
+      return cache;
     } catch (e) {
       localStorage.removeItem(LS_FAVICON_CACHE);
       return {};
@@ -261,7 +278,12 @@
 
   function saveFaviconCache() {
     try {
-      localStorage.setItem(LS_FAVICON_CACHE, JSON.stringify(faviconCache));
+      var toSave = {};
+      Object.keys(faviconCache).forEach(function (k) {
+        var entry = faviconCache[k];
+        toSave[k] = { ok: entry.ok, savedAt: entry.savedAt };
+      });
+      localStorage.setItem(LS_FAVICON_CACHE, JSON.stringify(toSave));
     } catch (e) {
       // Ignore quota errors; favicon loading can still fall back to initials.
     }
@@ -272,6 +294,7 @@
     if (!entry || !entry.savedAt) return null;
     var ttl = entry.ok ? FAVICON_SUCCESS_TTL : FAVICON_FAILURE_TTL;
     if (Date.now() - entry.savedAt > ttl) {
+      revokeFaviconBlob(url);
       delete faviconCache[url];
       saveFaviconCache();
       return null;
@@ -279,17 +302,49 @@
     return entry;
   }
 
-  function rememberFaviconResult(url, ok) {
+  function rememberFaviconResult(url, ok, blobUrl) {
     if (!ok) {
+      revokeFaviconBlob(url);
       delete faviconCache[url];
       saveFaviconCache();
       return;
     }
     faviconCache[url] = {
       ok: true,
-      savedAt: Date.now()
+      savedAt: Date.now(),
+      blobUrl: blobUrl || null
     };
     saveFaviconCache();
+  }
+
+  function revokeFaviconBlob(url) {
+    var oldBlob = faviconBlobCache[url];
+    if (oldBlob) {
+      URL.revokeObjectURL(oldBlob);
+      delete faviconBlobCache[url];
+    }
+  }
+
+  function storeFaviconBlob(url, img) {
+    revokeFaviconBlob(url);
+    try {
+      var canvas = document.createElement('canvas');
+      canvas.width = 32;
+      canvas.height = 32;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, 32, 32);
+      canvas.toBlob(function (blob) {
+        if (!blob) return;
+        var blobUrl = URL.createObjectURL(blob);
+        faviconBlobCache[url] = blobUrl;
+        faviconBlobUrls.push(blobUrl);
+        if (faviconCache[url]) {
+          faviconCache[url].blobUrl = blobUrl;
+        }
+      }, 'image/png');
+    } catch (e) {
+      // Canvas conversion failed, fall back to no blob cache
+    }
   }
 
   /* ====== Auth handlers ====== */
@@ -676,30 +731,53 @@
     fallback.textContent = NavBookmarks.getBookmarkInitial(bm);
     var img = document.createElement('img');
     img.alt = '';
-    img.style.display = 'none';
     var favUrl = NavBookmarks.getFaviconUrl(bm.url);
-    if (favUrl) {
+    var cachedFavicon = favUrl ? getFaviconCacheEntry(favUrl) : null;
+    var cachedBlob = favUrl ? faviconBlobCache[favUrl] : null;
+
+    if (favUrl && cachedBlob) {
+      // Blob cached → show instantly, no flash
+      img.src = cachedBlob;
+      img.style.display = '';
+      fallback.style.display = 'none';
+    } else if (favUrl && cachedFavicon && cachedFavicon.ok) {
+      // Success cached but no blob → set src directly, browser HTTP cache handles it
+      img.style.display = '';
+      fallback.style.display = 'none';
       img.decoding = 'async';
       img.referrerPolicy = 'no-referrer';
-      var cachedFavicon = getFaviconCacheEntry(favUrl);
-      if (faviconLoader && (!cachedFavicon || cachedFavicon.ok)) {
+      img.src = favUrl;
+    } else if (favUrl) {
+      // First load or previous failure → show fallback, load async
+      img.style.display = 'none';
+      img.style.opacity = '0';
+      fallback.style.display = '';
+      fallback.style.opacity = '1';
+      img.decoding = 'async';
+      img.referrerPolicy = 'no-referrer';
+      if (faviconLoader) {
         faviconLoader.enqueue({
           url: favUrl,
           img: img,
           onComplete: function (ok) {
-            rememberFaviconResult(favUrl, ok);
             if (!ok) {
-              img.style.display = 'none';
-              fallback.style.display = '';
+              rememberFaviconResult(favUrl, false);
+              img.style.opacity = '0';
+              fallback.style.opacity = '1';
               return;
             }
+            storeFaviconBlob(favUrl, img);
+            rememberFaviconResult(favUrl, true, faviconBlobCache[favUrl] || null);
             img.style.display = '';
+            img.style.opacity = '1';
+            fallback.style.opacity = '0';
             fallback.style.display = 'none';
           }
         });
       }
     } else {
       img.style.display = 'none';
+      fallback.style.display = '';
     }
     iconWrap.appendChild(fallback);
     iconWrap.appendChild(img);

@@ -3,7 +3,7 @@
 
 // CACHE_NAME 每次修改静态资源时应递增 build 版本号，activate 阶段会自动
 // 清理旧缓存，避免用户长期停留在缓存的旧代码上。
-var BUILD_VERSION = '2026-07-15-2e69ea5f';
+var BUILD_VERSION = '2026-07-18-79dade28';
 var CACHE_NAME = 'nimbus-nav-' + BUILD_VERSION;
 var CDN_CACHE_NAME = 'nimbus-nav-cdn-' + BUILD_VERSION;
 
