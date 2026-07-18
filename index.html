@@ -27,7 +27,7 @@
   <meta name="twitter:image" content="https://nav.ehon.cn/icon-512.png">
 
   <!-- Theme & Mobile -->
-  <meta name="theme-color" content="#3b82f6">
+  <meta name="theme-color" content="#2563eb">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Nimbus Nav">
@@ -40,6 +40,11 @@
   <link rel="manifest" href="manifest.json">
 
   <link rel="stylesheet" href="style.css">
+
+  <!-- 性能：预连接关键域名 -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://hmhbrqbxqcxwnfsvjpxk.supabase.co">
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
 
   <!-- JSON-LD Structured Data -->
   <script type="application/ld+json">
@@ -420,11 +425,11 @@
 
   <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.5" integrity="sha384-Fntl9b+IRzm2GKZK0c129fQFknWsn8pyxDejLO4wwds1LF9DSob2K2QXlfw8EIXn" crossorigin="anonymous"></script>
-  <script src="config.js?v=20260715"></script>
-  <script src="db.js?v=20260715"></script>
-  <script src="sync.js?v=20260715"></script>
-  <script src="search-utils.js?v=20260715"></script>
-  <script src="bookmark-utils.js?v=20260715"></script>
-  <script src="app.js?v=20260715"></script>
+  <script src="config.js?v=20260715" defer></script>
+  <script src="db.js?v=20260715" defer></script>
+  <script src="sync.js?v=20260715" defer></script>
+  <script src="search-utils.js?v=20260715" defer></script>
+  <script src="bookmark-utils.js?v=20260715" defer></script>
+  <script src="app.js?v=20260715" defer></script>
 </body>
 </html>

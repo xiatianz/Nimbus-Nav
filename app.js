@@ -568,6 +568,16 @@
       categoriesContainer.appendChild(section);
     });
 
+    // 全局空状态
+    if (sortedCats.length === 0) {
+      var emptyHero = document.createElement('div');
+      emptyHero.className = 'empty-hero';
+      emptyHero.innerHTML = '<div class="empty-hero-icon">📋</div>'
+        + '<div class="empty-hero-title">还没有分类</div>'
+        + '<div class="empty-hero-desc">点击下方按钮添加你的第一个分类</div>';
+      categoriesContainer.appendChild(emptyHero);
+    }
+
     // 添加分类按钮
     var addCatWrap = document.createElement('div');
     addCatWrap.style.textAlign = 'center';
@@ -701,9 +711,7 @@
     a.dataset.domain = NavBookmarks.getDomain(bm.url);
     a.dataset.description = bm.description || '';
     a.draggable = !options.readonly;
-    a.addEventListener('click', function () {
-      recordBookmarkVisit(bm.id);
-    });
+    // 事件委托处理 click/contextmenu/long-press，这里只保留 drag 相关
     if (!options.readonly) {
       a.addEventListener('dragstart', function (e) {
         draggedBookmarkId = bm.id;
@@ -724,13 +732,6 @@
         e.stopPropagation();
         moveBookmark(draggedBookmarkId, bm.id, bm.category_id);
       });
-      // Long-press / right-click opens edit modal on mobile
-      a.addEventListener('contextmenu', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        openBookmarkModal(null, bm);
-      });
-      addLongPressHandler(a, function () { openBookmarkModal(null, bm); });
     }
 
     // Icon
@@ -801,7 +802,7 @@
     descEl.textContent = bm.description || '';
 
     if (!options.readonly) {
-      // Actions
+      // Actions (事件委托处理 click)
       var actionsEl = document.createElement('div');
       actionsEl.className = 'card-actions';
 
@@ -811,11 +812,6 @@
       editBtn.textContent = '⋯';
       editBtn.title = '管理书签';
       editBtn.setAttribute('aria-label', '管理书签「' + bm.name + '」');
-      editBtn.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        openBookmarkModal(null, bm);
-      });
 
       var delBtn = document.createElement('button');
       delBtn.type = 'button';
@@ -823,11 +819,6 @@
       delBtn.textContent = '×';
       delBtn.title = '删除书签';
       delBtn.setAttribute('aria-label', '删除书签「' + bm.name + '」');
-      delBtn.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        confirmBookmarkDeletion(bm);
-      });
 
       actionsEl.appendChild(editBtn);
       actionsEl.appendChild(delBtn);
@@ -1065,7 +1056,13 @@
     openMode = mode === 'current' ? 'current' : 'new';
     localStorage.setItem(LS_OPEN_MODE, openMode);
     updateOpenModeButtons();
-    renderAll();
+    // 局部更新所有卡片的 target/rel，避免全量 renderAll
+    var cards = document.querySelectorAll('a.card[data-bm-id]');
+    var isCurrent = openMode === 'current';
+    cards.forEach(function (a) {
+      a.target = isCurrent ? '_self' : '_blank';
+      a.rel = isCurrent ? '' : 'noopener noreferrer';
+    });
   }
 
   function updateOpenModeButtons() {
@@ -2070,6 +2067,7 @@
     clockEl.id = 'footerClock';
     clockEl.style.fontSize = '0.72rem';
     clockEl.style.color = 'var(--text-light)';
+    clockEl.setAttribute('aria-hidden', 'true');
     var footerBottom = $('.footer-bottom');
     footerBottom.insertBefore(clockEl, footerBottom.firstChild);
 
@@ -2080,10 +2078,17 @@
       var s = String(now.getSeconds()).padStart(2, '0');
       clockEl.textContent = h + ':' + m + ':' + s;
     }
+    function scheduleTick() {
+      var ms = 1000 - (Date.now() % 1000);
+      clockIntervalId = setTimeout(function () {
+        tick();
+        scheduleTick();
+      }, ms);
+    }
     tick();
-    clockIntervalId = setInterval(tick, 1000);
+    scheduleTick();
     window.addEventListener('pagehide', function () {
-      if (clockIntervalId) { clearInterval(clockIntervalId); clockIntervalId = null; }
+      if (clockIntervalId) { clearTimeout(clockIntervalId); clockIntervalId = null; }
     });
   }
 
@@ -2096,10 +2101,11 @@
     el.setAttribute('role', type === 'error' ? 'alert' : 'status');
     toastContainer.appendChild(el);
 
+    var duration = type === 'error' ? 4500 : 2500;
     setTimeout(function () {
       el.classList.add('toast-out');
       setTimeout(function () { el.remove(); }, 300);
-    }, 2500);
+    }, duration);
   }
 
   /* ====== Helpers ====== */
@@ -2212,8 +2218,72 @@
       setOpenMode(openMode === 'current' ? 'new' : 'current');
     });
 
+    // 全局快捷键：/ 聚焦搜索，Escape 失焦
+    document.addEventListener('keydown', function (e) {
+      var tag = e.target.tagName;
+      var isInput = tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable;
+      if (isInput || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === '/') {
+        e.preventDefault();
+        searchInput.focus();
+        searchInput.select();
+      }
+    });
+
+    // 卡片事件委托：click / contextmenu / long-press
+    var longPressTimer = null;
+    var longPressMoved = false;
+    function clearLongPress() {
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    }
+
+    categoriesContainer.addEventListener('click', function (e) {
+      var shell = e.target.closest('.card-shell');
+      if (!shell) return;
+      var bmId = shell.dataset.bmId;
+      var bm = bookmarks.find(function (b) { return b.id === bmId; });
+      if (!bm) return;
+      var btn = e.target.closest('.card-action-btn');
+      if (btn) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (btn.classList.contains('card-action-delete')) confirmBookmarkDeletion(bm);
+        else openBookmarkModal(null, bm);
+        return;
+      }
+      recordBookmarkVisit(bm.id);
+    });
+    categoriesContainer.addEventListener('contextmenu', function (e) {
+      var shell = e.target.closest('.card-shell');
+      if (!shell) return;
+      var bmId = shell.dataset.bmId;
+      var bm = bookmarks.find(function (b) { return b.id === bmId; });
+      if (!bm) return;
+      e.preventDefault();
+      e.stopPropagation();
+      openBookmarkModal(null, bm);
+    });
+    categoriesContainer.addEventListener('touchstart', function (e) {
+      var shell = e.target.closest('.card-shell');
+      if (!shell) return;
+      var bmId = shell.dataset.bmId;
+      var bm = bookmarks.find(function (b) { return b.id === bmId; });
+      if (!bm) return;
+      longPressMoved = false;
+      clearLongPress();
+      longPressTimer = setTimeout(function () {
+        if (!longPressMoved) openBookmarkModal(null, bm);
+      }, 500);
+    }, { passive: true });
+    categoriesContainer.addEventListener('touchmove', function () {
+      longPressMoved = true;
+      clearLongPress();
+    }, { passive: true });
+    categoriesContainer.addEventListener('touchend', clearLongPress, { passive: true });
+    categoriesContainer.addEventListener('touchcancel', clearLongPress, { passive: true });
+
     document.addEventListener('click', function (e) {
-      if (!searchSuggestionsEl.contains(e.target) && e.target !== searchInput && e.target !== searchBtn) {
+      if (!searchSuggestionsEl.contains(e.target) && e.target !== searchInput && e.target !== searchBtn && e.target !== searchClearBtn) {
         closeSearchSuggestions();
       }
     });
