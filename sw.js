@@ -3,7 +3,7 @@
 
 // CACHE_NAME 每次修改静态资源时应递增 build 版本号，activate 阶段会自动
 // 清理旧缓存，避免用户长期停留在缓存的旧代码上。
-var BUILD_VERSION = '2026-07-18-145a5647';
+var BUILD_VERSION = '2026-07-18-331b31db';
 var CACHE_NAME = 'nimbus-nav-' + BUILD_VERSION;
 var CDN_CACHE_NAME = 'nimbus-nav-cdn-' + BUILD_VERSION;
 
@@ -29,7 +29,13 @@ var STATIC_ASSETS = [
 self.addEventListener('install', function (event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function (cache) {
-      return cache.addAll(STATIC_ASSETS);
+      return Promise.allSettled(
+        STATIC_ASSETS.map(function (asset) {
+          return cache.add(asset).catch(function (err) {
+            console.warn('SW: failed to cache ' + asset + ':', err.message);
+          });
+        })
+      );
     }).then(function () {
       return self.skipWaiting();
     })

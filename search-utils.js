@@ -24,6 +24,9 @@
   }
 
   function getDomain(url) {
+    if (typeof NavBookmarks !== 'undefined' && NavBookmarks.getDomain) {
+      return NavBookmarks.getDomain(url);
+    }
     try {
       return String(url || '').replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
     } catch (e) {

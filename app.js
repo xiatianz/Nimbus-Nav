@@ -149,7 +149,7 @@
 
     // 获取当前 session
     var user = await NavDB.getSession();
-    if (user) {
+    if (user && !(currentUser && currentUser.id === user.id)) {
       handleLoggedIn(user);
     }
 
@@ -322,6 +322,8 @@
     if (oldBlob) {
       URL.revokeObjectURL(oldBlob);
       delete faviconBlobCache[url];
+      var idx = faviconBlobUrls.indexOf(oldBlob);
+      if (idx >= 0) faviconBlobUrls.splice(idx, 1);
     }
   }
 
@@ -357,12 +359,7 @@
     localStorage.setItem('nav_last_user_id', user.id);
     NavSync.setOwner(user.id, { adoptGuest: true });
     NavSync.initDefaultData();
-    var scopedLocal = NavSync.loadLocal();
-    categories = scopedLocal.categories;
-    bookmarks = scopedLocal.bookmarks;
-    searchEngines = scopedLocal.searchEngines || [];
-    currentEngine = null;
-    visitStats = loadVisitStats();
+
     loginBtn.style.display = 'none';
     userMenu.style.display = '';
     
@@ -394,7 +391,9 @@
       var data = await NavSync.syncOnLogin();
       categories = data.categories;
       bookmarks = data.bookmarks;
-      searchEngines = data.searchEngines || searchEngines || [];
+      searchEngines = data.searchEngines || [];
+      currentEngine = null;
+      visitStats = loadVisitStats();
       renderSearchEngines();
       renderAll();
       syncDot.className = 'sync-dot';
@@ -402,6 +401,13 @@
       console.error('同步失败:', e);
       syncDot.className = 'sync-dot error';
       showToast('同步失败，请检查网络', 'error');
+      // 同步失败时仍用本地数据渲染
+      var scopedLocal = NavSync.loadLocal();
+      categories = scopedLocal.categories;
+      bookmarks = scopedLocal.bookmarks;
+      searchEngines = scopedLocal.searchEngines || [];
+      currentEngine = null;
+      visitStats = loadVisitStats();
       renderSearchEngines();
       renderAll();
     }
@@ -839,7 +845,7 @@
     if (!bookmark) return;
     showConfirmDialog('确定删除「' + bookmark.name + '」？', function () {
       NavSync.deleteBookmarkLocal(bookmark.id);
-      bookmarks = bookmarks.filter(function (item) { return item.id !== bookmark.id; });
+      bookmarks = NavSync.loadLocal().bookmarks;
       renderAll();
       showToast('已删除「' + bookmark.name + '」');
     });
@@ -848,8 +854,13 @@
   function deleteEditingBookmark() {
     var bookmark = bookmarks.find(function (item) { return item.id === editingBookmarkId; });
     if (!bookmark) return;
-    closeBookmarkModal();
-    confirmBookmarkDeletion(bookmark);
+    showConfirmDialog('确定删除「' + bookmark.name + '」？', function () {
+      NavSync.deleteBookmarkLocal(bookmark.id);
+      bookmarks = bookmarks.filter(function (item) { return item.id !== bookmark.id; });
+      closeBookmarkModal();
+      renderAll();
+      showToast('已删除「' + bookmark.name + '」');
+    });
   }
 
   /* ====== Custom Confirm Dialog ====== */
@@ -886,12 +897,16 @@
     openSearchSuggestion(NavSearch.getDirectAction(query, getCurrentEngineUrl()));
   }
 
+  var searchDebounceTimer = null;
   function updateSearchSuggestions() {
-    var query = searchInput.value.trim();
-    searchSuggestions = NavSearch.buildSuggestions(query, bookmarks, getCurrentEngineUrl());
-    selectedSuggestionIndex = searchSuggestions.length > 0 ? 0 : -1;
-    applyCardSearchState(query);
-    renderSearchSuggestions();
+    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(function () {
+      var query = searchInput.value.trim();
+      searchSuggestions = NavSearch.buildSuggestions(query, bookmarks, getCurrentEngineUrl());
+      selectedSuggestionIndex = searchSuggestions.length > 0 ? 0 : -1;
+      applyCardSearchState(query);
+      renderSearchSuggestions();
+    }, 150);
   }
 
   function renderSearchSuggestions() {
@@ -1010,14 +1025,16 @@
 
   function loadVisitStats() {
     try {
-      return JSON.parse(localStorage.getItem(LS_VISIT_STATS + '_' + encodeURIComponent(NavSync.getOwner())) || '{}') || {};
+      var owner = NavSync.getOwner() || 'guest';
+      return JSON.parse(localStorage.getItem(LS_VISIT_STATS + '_' + encodeURIComponent(owner)) || '{}') || {};
     } catch (e) {
       return {};
     }
   }
 
   function saveVisitStats() {
-    localStorage.setItem(LS_VISIT_STATS + '_' + encodeURIComponent(NavSync.getOwner()), JSON.stringify(visitStats));
+    var owner = NavSync.getOwner() || 'guest';
+    localStorage.setItem(LS_VISIT_STATS + '_' + encodeURIComponent(owner), JSON.stringify(visitStats));
   }
 
   function recordBookmarkVisit(id) {
@@ -1238,20 +1255,21 @@
       return;
     }
 
+    var localEngines = NavSync.loadLocal().searchEngines || [];
     if (id) {
-      var idx = searchEngines.findIndex(function(e) { return e.id === id; });
+      var idx = localEngines.findIndex(function(e) { return e.id === id; });
       if (idx >= 0) {
-        searchEngines[idx].name = name;
-        searchEngines[idx].url = url;
-        searchEngines[idx].updated_at = new Date().toISOString();
+        localEngines[idx].name = name;
+        localEngines[idx].url = url;
+        localEngines[idx].updated_at = new Date().toISOString();
       }
       showToast('引擎已更新');
     } else {
-      searchEngines.push({
+      localEngines.push({
         id: NavSync.uuid(),
         name: name,
         url: url,
-        sort_order: searchEngines.length,
+        sort_order: localEngines.length,
         updated_at: new Date().toISOString()
       });
       showToast('引擎已添加');
@@ -1259,11 +1277,12 @@
 
     closeEngineModal();
     try {
-      NavSync.saveSearchEnginesLocal(searchEngines);
+      NavSync.saveSearchEnginesLocal(localEngines);
     } catch (e) {
       showToast('搜索引擎保存失败', 'error');
       console.warn('saveSearchEnginesLocal failed:', e && e.message);
     }
+    searchEngines = NavSync.loadLocal().searchEngines || [];
     renderSearchEngines();
   }
 
@@ -1348,19 +1367,25 @@
       var updated = NavSync.updateBookmarkLocal(editingBookmarkId, {
         name: name, url: url, description: desc, category_id: catId
       });
-      if (updated) {
-        var idx = bookmarks.findIndex(function (b) { return b.id === editingBookmarkId; });
-        if (idx >= 0) bookmarks[idx] = updated;
+      if (!updated) {
+        showToast('书签更新失败', 'error');
+        return;
       }
       showToast('书签已更新');
     } else {
       var newBm = NavSync.addBookmarkLocal({
         category_id: catId, name: name, url: url, description: desc
       });
-      bookmarks.push(newBm);
+      if (!newBm) {
+        showToast('书签添加失败', 'error');
+        return;
+      }
       showToast('书签已添加');
     }
 
+    var local = NavSync.loadLocal();
+    categories = local.categories;
+    bookmarks = local.bookmarks;
     renderAll();
     closeBookmarkModal();
   }
@@ -1401,17 +1426,22 @@
 
     if (editingCategoryId) {
       var updated = NavSync.updateCategoryLocal(editingCategoryId, { name: name });
-      if (updated) {
-        var idx = categories.findIndex(function (c) { return c.id === editingCategoryId; });
-        if (idx >= 0) categories[idx] = updated;
+      if (!updated) {
+        showToast('分类更新失败', 'error');
+        return;
       }
       showToast('分类已更新');
     } else {
       var newCat = NavSync.addCategoryLocal(name);
-      categories.push(newCat);
+      if (!newCat) {
+        showToast('分类添加失败', 'error');
+        return;
+      }
       showToast('分类已添加');
     }
 
+    var local = NavSync.loadLocal();
+    categories = local.categories;
     renderAll();
     closeCategoryModal();
   }
@@ -1424,11 +1454,11 @@
     var msg = '确定删除分类「' + (cat ? cat.name : '') + '」？';
     if (bmCount > 0) msg += '\n该分类下有 ' + bmCount + ' 个书签将一并删除。';
 
-    closeCategoryModal();
-    showConfirmDialog(msg, async function () {
+    showConfirmDialog(msg, function () {
       NavSync.deleteCategoryLocal(catId);
       categories = categories.filter(function (c) { return c.id !== catId; });
       bookmarks = bookmarks.filter(function (b) { return b.category_id !== catId; });
+      closeCategoryModal();
       renderAll();
       showToast('分类已删除');
     });
@@ -1855,7 +1885,7 @@
     options = options || {};
     return new Promise(function (resolve) {
       var overlay = document.createElement('div');
-      overlay.className = 'modal-overlay active';
+      overlay.className = 'modal-overlay';
       overlay.setAttribute('role', 'dialog');
       overlay.setAttribute('aria-modal', 'true');
       overlay.style.zIndex = '2000';
@@ -1910,16 +1940,11 @@
       modal.appendChild(actions);
       overlay.appendChild(modal);
       document.body.appendChild(overlay);
-      document.body.classList.add('modal-open');
-      var page = $('.container');
-      var previousInert = page ? page.inert : false;
-      if (page) page.inert = true;
-      setTimeout(function () { input.focus(); input.select(); }, 0);
+      activateModal(overlay, input);
 
       function close(result) {
+        deactivateModal(overlay);
         overlay.remove();
-        if (page) page.inert = previousInert;
-        if (getActiveModals().length === 0) document.body.classList.remove('modal-open');
         resolve(result);
       }
 
@@ -1994,7 +2019,7 @@
 
   function registerServiceWorker() {
     if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
-    navigator.serviceWorker.register('./sw.js').catch(function (error) {
+    navigator.serviceWorker.register('./sw.js', { scope: '/' }).catch(function (error) {
       console.warn('离线服务注册失败:', error.message);
     });
   }
@@ -2023,6 +2048,8 @@
 
   /* ====== Clock ====== */
 
+  var clockIntervalId = null;
+
   function initClock() {
     var clockEl = document.createElement('span');
     clockEl.id = 'footerClock';
@@ -2039,7 +2066,10 @@
       clockEl.textContent = h + ':' + m + ':' + s;
     }
     tick();
-    setInterval(tick, 1000);
+    clockIntervalId = setInterval(tick, 1000);
+    window.addEventListener('pagehide', function () {
+      if (clockIntervalId) { clearInterval(clockIntervalId); clockIntervalId = null; }
+    });
   }
 
   /* ====== Toast ====== */
@@ -2058,14 +2088,6 @@
   }
 
   /* ====== Helpers ====== */
-
-  function getDomain(url) {
-    try {
-      return url.replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
-    } catch (e) {
-      return '';
-    }
-  }
 
   function normalizeHttpUrl(value) {
     var url = String(value || '').trim();

@@ -10,6 +10,8 @@ var NavSync = (function () {
     deleted_bookmarks: 'nav_deleted_bookmarks'
   };
   var STORAGE_VERSION_KEY = 'nav_storage_v2_migrated';
+  var DATA_VERSION_KEY = 'nav_data_version';
+  var CURRENT_DATA_VERSION = 1;
   var GUEST_OWNER = 'guest';
   var currentOwner = GUEST_OWNER;
   // 墓碑保留时长（毫秒）。云端删除已成功且超过该阈值的墓碑将从本地丢弃，
@@ -95,12 +97,54 @@ var NavSync = (function () {
     }
   }
 
+  function validateEntity(item, type) {
+    if (!item || typeof item !== 'object') return false;
+    if (!item.id || typeof item.id !== 'string') return false;
+    if (type === 'category' || type === 'bookmark') {
+      if (typeof item.name !== 'string' && typeof item.name !== 'undefined') return false;
+    }
+    if (type === 'bookmark') {
+      if (!item.category_id && typeof item.category_id !== 'string') return false;
+    }
+    if (type === 'searchEngine') {
+      if (typeof item.url !== 'string' || !item.url) return false;
+    }
+    return true;
+  }
+
+  function validateAndClean(data) {
+    var clean = {
+      categories: (data.categories || []).filter(function (c) { return validateEntity(c, 'category'); }),
+      bookmarks: (data.bookmarks || []).filter(function (b) { return validateEntity(b, 'bookmark'); }),
+      searchEngines: (data.searchEngines || []).filter(function (e) { return validateEntity(e, 'searchEngine'); })
+    };
+    if (clean.categories.length !== (data.categories || []).length
+        || clean.bookmarks.length !== (data.bookmarks || []).length
+        || clean.searchEngines.length !== (data.searchEngines || []).length) {
+      saveLocal(clean);
+    }
+    return clean;
+  }
+
+  function checkDataVersion() {
+    var storedVersion = parseInt(localStorage.getItem(DATA_VERSION_KEY), 10) || 0;
+    if (storedVersion < CURRENT_DATA_VERSION) {
+      // Future: run migrations here when schema changes
+      localStorage.setItem(DATA_VERSION_KEY, String(CURRENT_DATA_VERSION));
+    }
+  }
+
   function loadLocal() {
     migrateLegacyStorage();
+    checkDataVersion();
     var cats = parseStoredArray(key('categories'));
     var bms = parseStoredArray(key('bookmarks'));
     var raw = parseStoredArray(key('search_engines'));
     // Deduplicate by URL on every load to self-heal previously accumulated duplicates
+    // Sort by updated_at descending first to keep the newest version
+    raw.sort(function(a, b) {
+      return new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime();
+    });
     var seenUrls = {};
     var se = raw.filter(function(e) {
       var u = (e.url || '').trim();
@@ -112,7 +156,8 @@ var NavSync = (function () {
       // Persist the cleaned list immediately
       localStorage.setItem(key('search_engines'), JSON.stringify(se));
     }
-    return { categories: cats, bookmarks: bms, searchEngines: se };
+    var data = { categories: cats, bookmarks: bms, searchEngines: se };
+    return validateAndClean(data);
   }
 
   function saveLocal(data) {
@@ -230,34 +275,40 @@ var NavSync = (function () {
     // 仅在请求失败（网络问题、5xx 等）时保留墓碑等待下次同步补偿；过期墓碑
     // 由 loadDeleted 的 TTL 自动兜底清理。
     var bmIds = Object.keys(deletedBms);
+    var bmSuccessIds = [];
     for (var i = 0; i < bmIds.length; i++) {
       try {
         await NavDB.deleteBookmark(bmIds[i]);
-        delete deletedBms[bmIds[i]];
+        bmSuccessIds.push(bmIds[i]);
       } catch (e) {
         console.warn('云端删除书签请求失败:', e.message);
       }
     }
+    bmSuccessIds.forEach(function (id) { delete deletedBms[id]; });
 
     var catIds = Object.keys(deletedCats);
+    var catSuccessIds = [];
     for (var j = 0; j < catIds.length; j++) {
       try {
         await NavDB.deleteCategory(catIds[j]);
-        delete deletedCats[catIds[j]];
+        catSuccessIds.push(catIds[j]);
       } catch (e2) {
         console.warn('云端删除分类请求失败:', e2.message);
       }
     }
+    catSuccessIds.forEach(function (id) { delete deletedCats[id]; });
 
     var engineIds = Object.keys(deletedEngines);
+    var engineSuccessIds = [];
     for (var k = 0; k < engineIds.length; k++) {
       try {
         await NavDB.deleteSearchEngine(engineIds[k]);
-        delete deletedEngines[engineIds[k]];
+        engineSuccessIds.push(engineIds[k]);
       } catch (e3) {
         console.warn('云端删除搜索引擎请求失败:', e3.message);
       }
     }
+    engineSuccessIds.forEach(function (id) { delete deletedEngines[id]; });
 
     saveDeleted(bmKey, deletedBms);
     saveDeleted(catKey, deletedCats);
@@ -395,7 +446,14 @@ var NavSync = (function () {
       return new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime();
     }).forEach(function(b) {
       var newCatId = oldToNewCatId[b.category_id];
-      if (!newCatId) return; // 孤立书签丢弃
+      if (!newCatId) {
+        // 孤立书签：移动到第一个有效分类或保留原 category_id
+        if (uniqueCats.length > 0) {
+          newCatId = uniqueCats[0].id;
+        } else {
+          return;
+        }
+      }
 
       // 修正挂载的 category_id
       var mappedBm = Object.assign({}, b, { category_id: newCatId });
@@ -445,9 +503,15 @@ var NavSync = (function () {
       var local = localCatMap[id];
       var remote = remoteCatMap[id];
       if (local && remote) {
-        var lt = new Date(local.updated_at || 0).getTime();
-        var rt = new Date(remote.updated_at || 0).getTime();
-        mergedCats.push(rt >= lt ? remote : local);
+        var lt = local.updated_at ? new Date(local.updated_at).getTime() : 0;
+        var rt = remote.updated_at ? new Date(remote.updated_at).getTime() : 0;
+        // 优先使用服务器时间戳（remote），本地时钟可能不准
+        // 仅当本地明确更新且远端时间比本地旧超过 5 秒时才用本地
+        if (lt > rt + 5000) {
+          mergedCats.push(local);
+        } else {
+          mergedCats.push(remote);
+        }
       } else {
         mergedCats.push(local || remote);
       }
@@ -472,9 +536,13 @@ var NavSync = (function () {
       var remote = remoteBmMap[id];
       var merged;
       if (local && remote) {
-        var lt = new Date(local.updated_at || 0).getTime();
-        var rt = new Date(remote.updated_at || 0).getTime();
-        merged = rt >= lt ? remote : local;
+        var lt = local.updated_at ? new Date(local.updated_at).getTime() : 0;
+        var rt = remote.updated_at ? new Date(remote.updated_at).getTime() : 0;
+        if (lt > rt + 5000) {
+          merged = local;
+        } else {
+          merged = remote;
+        }
       } else {
         merged = local || remote;
       }
@@ -498,10 +566,13 @@ var NavSync = (function () {
       var local = localEngineMap[id];
       var remote = remoteEngineMap[id];
       if (local && remote) {
-        var lt = new Date(local.updated_at || 0).getTime();
-        var rt = new Date(remote.updated_at || 0).getTime();
-        // 与 categories / bookmarks 保持一致：远端更新时间不早于本地时以远端为准。
-        mergedEngines.push(rt >= lt ? remote : local);
+        var lt = local.updated_at ? new Date(local.updated_at).getTime() : 0;
+        var rt = remote.updated_at ? new Date(remote.updated_at).getTime() : 0;
+        if (lt > rt + 5000) {
+          mergedEngines.push(local);
+        } else {
+          mergedEngines.push(remote);
+        }
       } else {
         mergedEngines.push(local || remote);
       }
@@ -546,7 +617,11 @@ var NavSync = (function () {
     // 远端无数据 → 把本地推上去
     if (remoteData.categories.length === 0 && remoteData.bookmarks.length === 0 && (!remoteData.searchEngines || remoteData.searchEngines.length === 0)) {
       if (localData.categories.length > 0 || localData.bookmarks.length > 0 || localData.searchEngines.length > 0) {
-        await NavDB.pushAll(localData.categories, localData.bookmarks, localData.searchEngines);
+        try {
+          await NavDB.pushAll(localData.categories, localData.bookmarks, localData.searchEngines);
+        } catch (e) {
+          console.warn('pushAll 失败（下次同步补偿）:', e.message);
+        }
       }
       setMerged();
       setLocalSyncTime(new Date().toISOString());
@@ -568,7 +643,11 @@ var NavSync = (function () {
     // 两边都有 → 合并 & 终极去重
     var merged = deduplicate(mergeData(localData, remoteData));
     saveLocal(merged);
-    await NavDB.pushAll(merged.categories, merged.bookmarks, merged.searchEngines);
+    try {
+      await NavDB.pushAll(merged.categories, merged.bookmarks, merged.searchEngines);
+    } catch (e) {
+      console.warn('pushAll 失败（下次同步补偿）:', e.message);
+    }
     setMerged();
     setLocalSyncTime(new Date().toISOString());
     setDirty(false);
@@ -744,15 +823,20 @@ var NavSync = (function () {
     var data = loadLocal();
     var now = new Date().toISOString();
     var changed = [];
+    var orderMap = {};
     orderedEngines.forEach(function (engine, index) {
       if (!engine || !engine.id) return;
-      if (engine.sort_order !== index) {
-        engine.sort_order = index;
+      orderMap[engine.id] = index;
+    });
+    data.searchEngines.forEach(function (engine) {
+      if (orderMap.hasOwnProperty(engine.id) && engine.sort_order !== orderMap[engine.id]) {
+        engine.sort_order = orderMap[engine.id];
         engine.updated_at = now;
         changed.push(engine);
       }
     });
-    data.searchEngines = orderedEngines.slice();
+    if (changed.length === 0) return;
+    data.searchEngines.sort(function(a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
     saveLocal(data);
     markDirty();
     if (changed.length > 0 && NavDB.isLoggedIn() && NavDB.upsertSearchEngines) {
