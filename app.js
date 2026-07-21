@@ -74,7 +74,7 @@
     faviconCache = loadFaviconCache();
     faviconLoader = NavBookmarks.createFaviconLoader
       ? NavBookmarks.createFaviconLoader({
-        maxConcurrent: 6,
+        maxConcurrent: 12,
         timeoutMs: 10000,
         schedule: scheduleFaviconLoad
       })
@@ -262,19 +262,16 @@
       if (hasRun) return;
       hasRun = true;
       if (window.requestIdleCallback) {
-        window.requestIdleCallback(callback, { timeout: 1000 });
+        window.requestIdleCallback(callback, { timeout: 300 });
       } else {
         setTimeout(callback, 0);
       }
     }
 
-    if (document.readyState === 'complete') {
-      runIdle();
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', runIdle, { once: true });
     } else {
-      window.addEventListener('load', runIdle, { once: true });
-      setTimeout(function () {
-        if (document.readyState === 'complete') runIdle();
-      }, 0);
+      runIdle();
     }
   }
 
@@ -810,8 +807,14 @@
       img.decoding = 'async';
       img.referrerPolicy = 'no-referrer';
       if (faviconLoader) {
+        var domain = NavBookmarks.getDomain(bm.url);
+        var faviconUrls = [
+          favUrl,
+          'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=32'
+        ];
         faviconLoader.enqueue({
           url: favUrl,
+          urls: faviconUrls,
           img: img,
           onComplete: function (ok) {
             if (!ok) {

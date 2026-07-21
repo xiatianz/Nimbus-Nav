@@ -76,13 +76,29 @@
   function defaultLoadFavicon(task) {
     return new Promise(function (resolve) {
       var img = task && task.img;
-      if (!img || !task.url) {
+      if (!img || !task.url || !task.urls || !task.urls.length) {
         resolve(false);
         return;
       }
-      img.onload = function () { resolve(true); };
-      img.onerror = function () { resolve(false); };
-      img.src = task.url;
+      var idx = 0;
+      function tryNext() {
+        if (idx >= task.urls.length) {
+          resolve(false);
+          return;
+        }
+        var url = task.urls[idx++];
+        img.onload = function () {
+          // 校验图片实际尺寸，避免 0×0 损坏图片被当作成功
+          if (img.naturalWidth === 0 || img.naturalHeight === 0) {
+            tryNext();
+            return;
+          }
+          resolve(true);
+        };
+        img.onerror = tryNext;
+        img.src = url;
+      }
+      tryNext();
     });
   }
 
