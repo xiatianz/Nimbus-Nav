@@ -374,10 +374,20 @@
     idbDeleteFavicon(url);
   }
 
-  function storeFaviconBlob(url, img) {
+  function storeFaviconBlob(url, imgOrBlob) {
     revokeFaviconBlob(url);
     return new Promise(function (resolve) {
       try {
+        if (imgOrBlob instanceof Blob) {
+          var blobUrl = URL.createObjectURL(imgOrBlob);
+          faviconBlobCache[url] = blobUrl;
+          faviconBlobUrls.push(blobUrl);
+          if (faviconCache[url]) faviconCache[url].blobUrl = blobUrl;
+          idbSaveFavicon(url, imgOrBlob);
+          resolve(blobUrl);
+          return;
+        }
+        var img = imgOrBlob;
         var size = Math.min(64, Math.max(32, img.naturalWidth || 32));
         var canvas = document.createElement('canvas');
         canvas.width = size;
@@ -910,7 +920,7 @@
           url: favUrl,
           urls: faviconUrls,
           img: img,
-          onComplete: function (ok) {
+          onComplete: function (ok, task) {
             if (!ok) {
               rememberFaviconResult(favUrl, false);
               img.style.display = 'none';
@@ -919,7 +929,8 @@
             }
             img.style.display = '';
             fallback.style.display = 'none';
-            storeFaviconBlob(favUrl, img).then(function (blobUrl) {
+            var blobSrc = (task && task._blob) || img;
+            storeFaviconBlob(favUrl, blobSrc).then(function (blobUrl) {
               rememberFaviconResult(favUrl, true, blobUrl);
             });
           }

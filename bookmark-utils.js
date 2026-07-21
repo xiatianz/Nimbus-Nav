@@ -113,17 +113,46 @@
           resolve(false);
           return;
         }
-        var url = task.urls[idx++];
-        img.onload = function () {
-          // 校验实际尺寸：0x0 是损坏图片，1x1 是占位图
-          if (img.naturalWidth <= 1 || img.naturalHeight <= 1) {
+      var url = task.urls[idx++];
+        // favicon.im 用 fetch 获取 blob，避免 canvas 跨域污染，便于 IDB 持久化
+        if (url.indexOf('favicon.im/') >= 0) {
+          fetch(url, { cache: 'default' }).then(function (resp) {
+            if (!resp.ok) { tryNext(); return; }
+            return resp.blob();
+          }).then(function (blob) {
+            if (!blob || blob.size < 100) { tryNext(); return; }
+            var blobUrl = URL.createObjectURL(blob);
+            task._blob = blob;
+            img.onload = function () {
+              if (img.naturalWidth <= 1 || img.naturalHeight <= 1) {
+                URL.revokeObjectURL(blobUrl);
+                task._blob = null;
+                tryNext();
+                return;
+              }
+              resolve(true);
+            };
+            img.onerror = function () {
+              URL.revokeObjectURL(blobUrl);
+              task._blob = null;
+              tryNext();
+            };
+            img.src = blobUrl;
+          }).catch(function () {
             tryNext();
-            return;
-          }
-          resolve(true);
-        };
-        img.onerror = tryNext;
-        img.src = url;
+          });
+        } else {
+          // 网站自身路径用 img.src 加载
+          img.onload = function () {
+            if (img.naturalWidth <= 1 || img.naturalHeight <= 1) {
+              tryNext();
+              return;
+            }
+            resolve(true);
+          };
+          img.onerror = tryNext;
+          img.src = url;
+        }
       }
       tryNext();
     });
@@ -148,7 +177,7 @@
         }
       }
       if (typeof task.onComplete === 'function') {
-        task.onComplete(!!ok);
+        task.onComplete(!!ok, task);
       }
       active -= 1;
       drain();
