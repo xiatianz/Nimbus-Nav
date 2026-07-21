@@ -8,26 +8,25 @@ function testInitialUsesNameFirst() {
   }), 'F');
 }
 
-function testFaviconUrlUsesFaviconIco() {
+function testFaviconUrlUsesFaviconIm() {
   const url = NavBookmarks.getFaviconUrl('https://example.com/docs');
-  assert.strictEqual(url, 'https://example.com/favicon.ico');
+  // 使用 favicon.im API
+  assert.strictEqual(url, 'https://favicon.im/example.com');
 }
 
 function testFaviconCandidatesBasicDomain() {
   const candidates = NavBookmarks.getFaviconCandidates('https://example.com/docs');
-  assert.ok(candidates.includes('https://example.com/favicon.ico'));
-  assert.ok(candidates.includes('https://example.com/favicon.png'));
+  assert.ok(candidates.includes('https://favicon.im/example.com'));
   assert.ok(candidates.includes('https://example.com/apple-touch-icon.png'));
-  // example.com 不是子域名，不应有根域 fallback
-  assert.strictEqual(candidates.filter(u => u.indexOf('example.com') < 0).length, 0);
+  assert.ok(candidates.includes('https://example.com/favicon.ico'));
 }
 
 function testFaviconCandidatesSubdomain() {
   const candidates = NavBookmarks.getFaviconCandidates('https://dashboard.render.com/');
+  assert.ok(candidates.includes('https://favicon.im/dashboard.render.com'));
+  // 子域名应包含根域 favicon.im 和直接路径 fallback
+  assert.ok(candidates.includes('https://favicon.im/render.com'));
   assert.ok(candidates.includes('https://dashboard.render.com/favicon.ico'));
-  // 子域名应包含根域 fallback
-  assert.ok(candidates.includes('https://render.com/favicon.ico'));
-  assert.ok(candidates.includes('https://render.com/favicon.png'));
 }
 
 function testRecentBookmarksSortByLastVisit() {
@@ -115,7 +114,7 @@ async function testFaviconLoaderTimesOutAndContinues() {
 
 async function run() {
   testInitialUsesNameFirst();
-  testFaviconUrlUsesFaviconIco();
+  testFaviconUrlUsesFaviconIm();
   testFaviconCandidatesBasicDomain();
   testFaviconCandidatesSubdomain();
   testRecentBookmarksSortByLastVisit();

@@ -34,32 +34,32 @@
       var value = normalizeBookmarkUrl(url);
       var parsed = new URL(value);
       if (!/^https?:$/.test(parsed.protocol)) return '';
-      return new URL('/favicon.ico', parsed.origin).href;
+      // 使用 favicon.im API —— 国内可用、CDN 缓存、覆盖面广
+      var domain = parsed.hostname.replace(/^www\./, '');
+      return 'https://favicon.im/' + domain;
     } catch (e) {
       return '';
     }
   }
 
-  // 生成多个备选 favicon URL（按优先级排列）
+  // 生成备选 favicon URL 列表（favicon.im 优先，网站自身路径兜底）
   function getFaviconCandidates(url) {
     try {
       var value = normalizeBookmarkUrl(url);
       var parsed = new URL(value);
       if (!/^https?:$/.test(parsed.protocol)) return [];
-      var origin = parsed.origin;
+      var domain = parsed.hostname.replace(/^www\./, '');
       var candidates = [
-        origin + '/favicon.ico',
-        origin + '/favicon.png',
-        origin + '/apple-touch-icon.png',
-        origin + '/apple-touch-icon-precomposed.png'
+        'https://favicon.im/' + domain,
+        parsed.origin + '/favicon.ico',
+        parsed.origin + '/apple-touch-icon.png'
       ];
       // 子域名额外尝试根域的 favicon
       var hostParts = parsed.hostname.replace(/^www\./, '').split('.');
       if (hostParts.length > 2) {
         var rootDomain = hostParts.slice(-2).join('.');
-        var rootOrigin = parsed.protocol + '//' + rootDomain;
-        candidates.push(rootOrigin + '/favicon.ico');
-        candidates.push(rootOrigin + '/favicon.png');
+        candidates.push('https://favicon.im/' + rootDomain);
+        candidates.push(parsed.protocol + '//' + rootDomain + '/favicon.ico');
       }
       return candidates;
     } catch (e) {
