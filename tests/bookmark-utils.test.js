@@ -10,8 +10,24 @@ function testInitialUsesNameFirst() {
 
 function testFaviconUrlUsesFaviconIco() {
   const url = NavBookmarks.getFaviconUrl('https://example.com/docs');
-  // favicon is loaded directly from the site's origin; no third-party service
   assert.strictEqual(url, 'https://example.com/favicon.ico');
+}
+
+function testFaviconCandidatesBasicDomain() {
+  const candidates = NavBookmarks.getFaviconCandidates('https://example.com/docs');
+  assert.ok(candidates.includes('https://example.com/favicon.ico'));
+  assert.ok(candidates.includes('https://example.com/favicon.png'));
+  assert.ok(candidates.includes('https://example.com/apple-touch-icon.png'));
+  // example.com 不是子域名，不应有根域 fallback
+  assert.strictEqual(candidates.filter(u => u.indexOf('example.com') < 0).length, 0);
+}
+
+function testFaviconCandidatesSubdomain() {
+  const candidates = NavBookmarks.getFaviconCandidates('https://dashboard.render.com/');
+  assert.ok(candidates.includes('https://dashboard.render.com/favicon.ico'));
+  // 子域名应包含根域 fallback
+  assert.ok(candidates.includes('https://render.com/favicon.ico'));
+  assert.ok(candidates.includes('https://render.com/favicon.png'));
 }
 
 function testRecentBookmarksSortByLastVisit() {
@@ -100,6 +116,8 @@ async function testFaviconLoaderTimesOutAndContinues() {
 async function run() {
   testInitialUsesNameFirst();
   testFaviconUrlUsesFaviconIco();
+  testFaviconCandidatesBasicDomain();
+  testFaviconCandidatesSubdomain();
   testRecentBookmarksSortByLastVisit();
   await testFaviconLoaderLimitsConcurrency();
   await testFaviconLoaderTimesOutAndContinues();

@@ -40,6 +40,33 @@
     }
   }
 
+  // 生成多个备选 favicon URL（按优先级排列）
+  function getFaviconCandidates(url) {
+    try {
+      var value = normalizeBookmarkUrl(url);
+      var parsed = new URL(value);
+      if (!/^https?:$/.test(parsed.protocol)) return [];
+      var origin = parsed.origin;
+      var candidates = [
+        origin + '/favicon.ico',
+        origin + '/favicon.png',
+        origin + '/apple-touch-icon.png',
+        origin + '/apple-touch-icon-precomposed.png'
+      ];
+      // 子域名额外尝试根域的 favicon
+      var hostParts = parsed.hostname.replace(/^www\./, '').split('.');
+      if (hostParts.length > 2) {
+        var rootDomain = hostParts.slice(-2).join('.');
+        var rootOrigin = parsed.protocol + '//' + rootDomain;
+        candidates.push(rootOrigin + '/favicon.ico');
+        candidates.push(rootOrigin + '/favicon.png');
+      }
+      return candidates;
+    } catch (e) {
+      return [];
+    }
+  }
+
   function getBookmarkInitial(bookmark) {
     var source = (bookmark && (bookmark.name || getDomain(bookmark.url))) || '?';
     return String(source).trim().charAt(0).toUpperCase() || '?';
@@ -88,8 +115,8 @@
         }
         var url = task.urls[idx++];
         img.onload = function () {
-          // 校验图片实际尺寸，避免 0×0 损坏图片被当作成功
-          if (img.naturalWidth === 0 || img.naturalHeight === 0) {
+          // 校验实际尺寸：0x0 是损坏图片，1x1 是占位图
+          if (img.naturalWidth <= 1 || img.naturalHeight <= 1) {
             tryNext();
             return;
           }
@@ -178,6 +205,7 @@
   return {
     getDomain: getDomain,
     getFaviconUrl: getFaviconUrl,
+    getFaviconCandidates: getFaviconCandidates,
     getBookmarkInitial: getBookmarkInitial,
     getTopVisitedBookmarks: getTopVisitedBookmarks,
     createFaviconLoader: createFaviconLoader

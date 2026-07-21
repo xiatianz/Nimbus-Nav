@@ -29,7 +29,7 @@
   var LS_FAVICON_CACHE = 'nav_favicon_cache_v3';
   var LS_USER_CACHE = 'nav_user_cache';
   var FAVICON_SUCCESS_TTL = 7 * 24 * 60 * 60 * 1000;
-  var FAVICON_FAILURE_TTL = 0;
+  var FAVICON_FAILURE_TTL = 24 * 60 * 60 * 1000; // 失败缓存 24 小时，避免每次刷新重试
 
   /* ====== DOM refs ====== */
   var $ = function (sel) { return document.querySelector(sel); };
@@ -92,6 +92,32 @@
     openMode = localStorage.getItem(LS_OPEN_MODE) || 'new';
     updateOpenModeButtons();
     renderAll();
+
+    // 从 IndexedDB 预加载 favicon blob，加载完毕后用 blob URL 替换已渲染的图标
+    idbLoadAllFavicons().then(function (blobs) {
+      var keys = Object.keys(blobs);
+      if (!keys.length) return;
+      keys.forEach(function (url) {
+        var blob = blobs[url];
+        if (!blob) return;
+        var blobUrl = URL.createObjectURL(blob);
+        faviconBlobCache[url] = blobUrl;
+        faviconBlobUrls.push(blobUrl);
+        if (faviconCache[url]) faviconCache[url].blobUrl = blobUrl;
+      });
+      // 用 blob 刷新已渲染卡片中的 img
+      var imgs = document.querySelectorAll('.card-icon img[data-fav-url]');
+      imgs.forEach(function (img) {
+        var fUrl = img.getAttribute('data-fav-url');
+        if (fUrl && faviconBlobCache[fUrl]) {
+          img.src = faviconBlobCache[fUrl];
+          img.style.display = '';
+          var fb = img.parentNode && img.parentNode.querySelector('.card-icon-fallback');
+          if (fb) fb.style.display = 'none';
+        }
+      });
+    });
+
     initTheme();
     initClock();
     registerServiceWorker();
@@ -322,7 +348,10 @@
   function rememberFaviconResult(url, ok, blobUrl) {
     if (!ok) {
       revokeFaviconBlob(url);
-      delete faviconCache[url];
+      faviconCache[url] = {
+        ok: false,
+        savedAt: Date.now()
+      };
       saveFaviconCache();
       return;
     }
@@ -342,30 +371,98 @@
       var idx = faviconBlobUrls.indexOf(oldBlob);
       if (idx >= 0) faviconBlobUrls.splice(idx, 1);
     }
+    idbDeleteFavicon(url);
   }
 
   function storeFaviconBlob(url, img) {
     revokeFaviconBlob(url);
     return new Promise(function (resolve) {
       try {
+        var size = Math.min(64, Math.max(32, img.naturalWidth || 32));
         var canvas = document.createElement('canvas');
-        canvas.width = 32;
-        canvas.height = 32;
+        canvas.width = size;
+        canvas.height = size;
         var ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, 32, 32);
+        ctx.drawImage(img, 0, 0, size, size);
         canvas.toBlob(function (blob) {
           if (!blob) { resolve(null); return; }
           var blobUrl = URL.createObjectURL(blob);
           faviconBlobCache[url] = blobUrl;
           faviconBlobUrls.push(blobUrl);
-          if (faviconCache[url]) {
-            faviconCache[url].blobUrl = blobUrl;
-          }
+          if (faviconCache[url]) faviconCache[url].blobUrl = blobUrl;
+          idbSaveFavicon(url, blob);
           resolve(blobUrl);
         }, 'image/png');
       } catch (e) {
         resolve(null);
       }
+    });
+  }
+
+  /* ====== IndexedDB favicon 持久化 ====== */
+  var IDB_NAME = 'nimbus_favicons';
+  var IDB_STORE = 'blobs';
+  var IDB_VERSION = 1;
+  var idbInstance = null;
+
+  function openIdb() {
+    if (idbInstance) return Promise.resolve(idbInstance);
+    return new Promise(function (resolve) {
+      try {
+        var req = indexedDB.open(IDB_NAME, IDB_VERSION);
+        req.onupgradeneeded = function (e) {
+          var db = e.target.result;
+          if (!db.objectStoreNames.contains(IDB_STORE)) {
+            db.createObjectStore(IDB_STORE);
+          }
+        };
+        req.onsuccess = function (e) { idbInstance = e.target.result; resolve(idbInstance); };
+        req.onerror = function () { resolve(null); };
+      } catch (ex) { resolve(null); }
+    });
+  }
+
+  function idbSaveFavicon(url, blob) {
+    openIdb().then(function (db) {
+      if (!db) return;
+      try {
+        var tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put(blob, url);
+      } catch (e) { /* ignore */ }
+    });
+  }
+
+  function idbLoadAllFavicons() {
+    return openIdb().then(function (db) {
+      if (!db) return {};
+      return new Promise(function (resolve) {
+        try {
+          var tx = db.transaction(IDB_STORE, 'readonly');
+          var store = tx.objectStore(IDB_STORE);
+          var result = {};
+          var cursor = store.openCursor();
+          cursor.onsuccess = function (e) {
+            var c = e.target.result;
+            if (c) {
+              result[c.key] = c.value;
+              c.continue();
+            } else {
+              resolve(result);
+            }
+          };
+          cursor.onerror = function () { resolve(result); };
+        } catch (ex) { resolve({}); }
+      });
+    });
+  }
+
+  function idbDeleteFavicon(url) {
+    openIdb().then(function (db) {
+      if (!db) return;
+      try {
+        var tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).delete(url);
+      } catch (e) { /* ignore */ }
     });
   }
 
@@ -785,6 +882,7 @@
     var img = document.createElement('img');
     img.alt = '';
     var favUrl = NavBookmarks.getFaviconUrl(bm.url);
+    if (favUrl) img.setAttribute('data-fav-url', favUrl);
     var cachedFavicon = favUrl ? getFaviconCacheEntry(favUrl) : null;
     var cachedBlob = favUrl ? faviconBlobCache[favUrl] : null;
 
@@ -800,18 +898,14 @@
       img.decoding = 'async';
       img.referrerPolicy = 'no-referrer';
       img.src = favUrl;
-    } else if (favUrl) {
+    } else if (favUrl && !(cachedFavicon && !cachedFavicon.ok)) {
       // First load or previous failure → show fallback, load async
       img.style.display = 'none';
       fallback.style.display = '';
-      img.decoding = 'async';
+     img.decoding = 'async';
       img.referrerPolicy = 'no-referrer';
-      if (faviconLoader) {
-        var domain = NavBookmarks.getDomain(bm.url);
-        var faviconUrls = [
-          favUrl,
-          'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=32'
-        ];
+     if (faviconLoader) {
+        var faviconUrls = NavBookmarks.getFaviconCandidates(bm.url);
         faviconLoader.enqueue({
           url: favUrl,
           urls: faviconUrls,
