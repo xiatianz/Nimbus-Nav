@@ -38,8 +38,16 @@ var NavDB = (function () {
 
   async function getSession() {
     var sb = getClient();
-    var _ref = await sb.auth.getSession(), data = _ref.data;
-    currentUser = data.session ? data.session.user : null;
+    var timeout = new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 4000); });
+    var result = await Promise.race([
+      sb.auth.getSession().then(function (r) { return r; }),
+      timeout
+    ]);
+    if (!result || !result.data) {
+      currentUser = null;
+      return null;
+    }
+    currentUser = result.data.session ? result.data.session.user : null;
     return currentUser;
   }
 

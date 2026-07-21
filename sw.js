@@ -3,7 +3,7 @@
 
 // CACHE_NAME 每次修改静态资源时应递增 build 版本号，activate 阶段会自动
 // 清理旧缓存，避免用户长期停留在缓存的旧代码上。
-var BUILD_VERSION = '2026-07-21-e26b00ef';
+var BUILD_VERSION = '2026-07-21-8f6ac278';
 var CACHE_NAME = 'nimbus-nav-' + BUILD_VERSION;
 var CDN_CACHE_NAME = 'nimbus-nav-cdn-' + BUILD_VERSION;
 
@@ -94,11 +94,31 @@ self.addEventListener('fetch', function (event) {
     return;
   }
 
-  // For navigation (HTML), try network first then cache fallback.
+  // For navigation (HTML), network-first with timeout + cache fallback.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(function () {
-        return caches.match('./index.html');
+      Promise.race([
+        fetch(request).then(function (response) {
+          // 缓存成功响应，下次离线/超时可兜底
+          if (response && response.ok) {
+            caches.open(CACHE_NAME).then(function (cache) {
+              cache.put('./index.html', response.clone()).catch(function () {});
+            }).catch(function () {});
+          }
+          return response;
+        }),
+        new Promise(function (resolve, reject) {
+          setTimeout(function () { reject(new Error('nav-timeout')); }, 4000);
+        })
+      ]).catch(function () {
+        return caches.match('./index.html').then(function (cached) {
+          if (cached) return cached;
+          // 最后兜底：返回一个最小 HTML，避免刷新一直转
+          return new Response(
+            '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="1"></head><body></body></html>',
+            { headers: { 'Content-Type': 'text/html' } }
+          );
+        });
       })
     );
     return;
