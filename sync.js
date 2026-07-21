@@ -272,43 +272,32 @@ var NavSync = (function () {
     if (!NavDB.isLoggedIn()) return filteredRemote;
 
     // 云端删除成功后立即清理墓碑，避免每次登录都重放所有历史删除。
-    // 仅在请求失败（网络问题、5xx 等）时保留墓碑等待下次同步补偿；过期墓碑
-    // 由 loadDeleted 的 TTL 自动兜底清理。
-    var bmIds = Object.keys(deletedBms);
-    var bmSuccessIds = [];
-    for (var i = 0; i < bmIds.length; i++) {
-      try {
-        await NavDB.deleteBookmark(bmIds[i]);
-        bmSuccessIds.push(bmIds[i]);
-      } catch (e) {
-        console.warn('云端删除书签请求失败:', e.message);
-      }
+    // 并发执行（不阻塞），单个失败不影响其他；超时 5s 自动跳过。
+    function deleteWithTimeout(deleteFn, id) {
+      return new Promise(function (resolve) {
+        var hasTimeout = typeof setTimeout === 'function';
+        var timer = hasTimeout ? setTimeout(function () { resolve(false); }, 5000) : null;
+        Promise.resolve(deleteFn(id)).then(function () {
+          if (timer) clearTimeout(timer);
+          resolve(true);
+        }).catch(function () {
+          if (timer) clearTimeout(timer);
+          resolve(false);
+        });
+      });
     }
-    bmSuccessIds.forEach(function (id) { delete deletedBms[id]; });
+
+    var bmIds = Object.keys(deletedBms);
+    var bmResults = await Promise.all(bmIds.map(function (id) { return deleteWithTimeout(NavDB.deleteBookmark, id); }));
+    bmIds.forEach(function (id, i) { if (bmResults[i]) delete deletedBms[id]; });
 
     var catIds = Object.keys(deletedCats);
-    var catSuccessIds = [];
-    for (var j = 0; j < catIds.length; j++) {
-      try {
-        await NavDB.deleteCategory(catIds[j]);
-        catSuccessIds.push(catIds[j]);
-      } catch (e2) {
-        console.warn('云端删除分类请求失败:', e2.message);
-      }
-    }
-    catSuccessIds.forEach(function (id) { delete deletedCats[id]; });
+    var catResults = await Promise.all(catIds.map(function (id) { return deleteWithTimeout(NavDB.deleteCategory, id); }));
+    catIds.forEach(function (id, i) { if (catResults[i]) delete deletedCats[id]; });
 
     var engineIds = Object.keys(deletedEngines);
-    var engineSuccessIds = [];
-    for (var k = 0; k < engineIds.length; k++) {
-      try {
-        await NavDB.deleteSearchEngine(engineIds[k]);
-        engineSuccessIds.push(engineIds[k]);
-      } catch (e3) {
-        console.warn('云端删除搜索引擎请求失败:', e3.message);
-      }
-    }
-    engineSuccessIds.forEach(function (id) { delete deletedEngines[id]; });
+    var engineResults = await Promise.all(engineIds.map(function (id) { return deleteWithTimeout(NavDB.deleteSearchEngine, id); }));
+    engineIds.forEach(function (id, i) { if (engineResults[i]) delete deletedEngines[id]; });
 
     saveDeleted(bmKey, deletedBms);
     saveDeleted(catKey, deletedCats);

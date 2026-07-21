@@ -2,17 +2,21 @@
 var NavDB = (function () {
   var client = null;
   var currentUser = null;
+  var sessionAbortController = null;
 
   function init() {
     client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
         persistSession: true,
-        autoRefreshToken: true,
+        autoRefreshToken: false,
         detectSessionInUrl: false,
         flowType: 'implicit',
         experimental: {
           passkey: true
         }
+      },
+      realtime: {
+        enabled: false
       }
     });
     return client;
@@ -38,16 +42,27 @@ var NavDB = (function () {
 
   async function getSession() {
     var sb = getClient();
+    // 取消上一次未完成的 session 请求，避免 fetch 挂起导致 spinner 不停止
+    if (sessionAbortController) {
+      sessionAbortController.abort();
+    }
+    sessionAbortController = new AbortController();
     var timeout = new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 4000); });
-    var result = await Promise.race([
-      sb.auth.getSession().then(function (r) { return r; }),
-      timeout
+    var fetchPromise = sb.auth.getSession().then(function (r) { return r; });
+    // 超时时主动 abort 底层 fetch，释放浏览器 pending 请求
+    var raceResult = await Promise.race([
+      fetchPromise,
+      timeout.then(function () {
+        sessionAbortController.abort();
+        return null;
+      })
     ]);
-    if (!result || !result.data) {
+    sessionAbortController = null;
+    if (!raceResult || !raceResult.data) {
       currentUser = null;
       return null;
     }
-    currentUser = result.data.session ? result.data.session.user : null;
+    currentUser = raceResult.data.session ? raceResult.data.session.user : null;
     return currentUser;
   }
 
